@@ -1,0 +1,69 @@
+package contraption
+
+// -> time ->
+// Click(1):in Hover Unclick(1):in --- Yes
+// ( Click(1) Hover Unclick(1) ):in --- No
+// ( Click(1) Click(3) .* Unclick(1) Unclick(3) ):in --- No
+// (Click(1) Unclick(1):begin Hover Click(1) Unclick(1):end):in --- No
+// Click(1):in Unclick(1):in:begin Hover:in Click(1):in Unclick(1):end:in --- Yes
+// Click(1):in Unclick(1):in:begin Hover:in Click(1):in Unclick(1):end:in | Click(3):in Unclick(3):in:begin Hover:in Click(3):in Unclick(3):end:in
+// (Click(1):in Unclick(1):in | Click(2):in Unclick(2):in) Press('A') Release('A')
+// Click(1):in Unclick(1):in:begin Hover:in Click(1):in Unclick(1):end:in
+// Click(1) Unclick(1) Hover Click(1) Unclick(1)
+
+// u.Match(regex string, r image.Rectangle, d time.Duration) // pure match based on classes
+// u.MatchIn(regex string, r image.Rectangle) // as if every event has :in
+// u.MatchTime(regex string, d time.Duration) // as if first matched event has :begin and last has :end
+// u.MatchInTime(regex string, r image.Rectangle, d time.Duration) // u.MatchIn && u.MatchTime
+
+// if u.Match(`Click(1):in:begin Unclick(1):in Hover:in Click(1):in Unclick(1):end:in`, r, d) { ...
+// if u.MatchInTime(`Click(1) Unclick(1) Hover Click(1) Unclick(1)`, r, d) { ...
+
+type rpeg Peg {
+	typs map[string]any
+	Type string
+	Value string
+	Begin bool
+	End bool
+	In bool
+}
+
+Body <- Alter / Cat
+Alter <- Cat [ \t\n]* '|' [ \t\n]* Cat / 
+	Cat [ \t\n]* '|' [ \t\n]* Alter
+Cat <- Point ([ \t\n]* Cat)?
+//Cat <- (Point/Group) (SP (Point/Group))*
+//Group <- '(' SP Alter SP ')' {panic("currently not supported")} Loop?
+
+Point <- Concrete (Any/Several/Maybe/LazyAny/LazySeveral/LazyMaybe)?
+//Point <- (Concrete / Joker) Loop?
+//Joker <- '.' {panic("jokers are not implemented, sorry")}
+Concrete <- Type
+	('(' SP Value SP ')')? 
+	(Rect Time? / Time? Rect?)
+
+
+//Loop <- Any/Several/Maybe
+Any <- '*'
+Several <- '+'
+Maybe <- '?'
+LazyAny <- '*?'
+LazySeveral <- '+?'
+LazyMaybe <- '??'
+
+Type <- Token
+Value <- Number / Char / Token
+
+Rect <- In / Out
+In <- ':in'
+Out <- ':out'
+Time <- Begin / End
+Begin <- ':begin'
+End <- ':end'
+
+Token <- '!'?[_a-zA-Z][_a-zA-Z0-9/.\-]* / // .-/ are for mime
+	'←'/'→'/'↑'/'↓' / // exceptions
+	'.' // wildcard
+Number <- [-+]?[0-9][oOxX]?[0-9]*
+Char <- ['] . [']
+SP <- [ \t\n]*
