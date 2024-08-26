@@ -1,4 +1,4 @@
-module endeawrite
+module contraption
 
 go 1.20
 
