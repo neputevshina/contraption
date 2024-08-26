@@ -1,4 +1,4 @@
-module contraption
+module github.com/neputevshina/contraption
 
 go 1.20
 
