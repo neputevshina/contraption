@@ -3,11 +3,16 @@
 // A good user interface framework must be an engine for a word processing game.
 //
 // TODO:
+//	- Text area
+//		- https://rxi.github.io/textbox_behaviour.html
+//	- Sequence must be a special shape that pastes Sorms inside a compound, not being compound itself
+//		- So wo.Text(io.RuneReader) could be Sequence
+//		- Not clear how to reuse memory of pools in this case
 // 	- Quadtree for pool
-//	- Regexps and coords change [MAJOR TOPIC]
-//		- Easily solved with hitmaps — just draw hitmap with all component's transformations
+//	- Matching past in regexps and coords change [MAJOR TOPIC]
+//		- Easily solved with hitmaps — just draw a hitmap with all component's transformations
 //		- Could use per-event UV deltas, but 64x viewport memory overhead is too much
-//		- VDOM — retain, reconcile and feedback
+//		- Use VDOM — retain, reconcile and feedback
 //		- Save matrix for every shape that looks behind, 64×8×16×[shape count] bytes of overhead
 //			- Simpler version: for every shape that has Cond/CondPaint, which is larger but still less than 10% of a tree
 //	- Laziness and scrolling [MAJOR TOPIC]
@@ -592,20 +597,23 @@ func (wo *World) NewBottomUpText(font []byte, capk float64) func(size float64, s
 
 func (wo *World) generalNewText(font []byte, capk float64, kind tagkind) func(size float64, str string) Sorm {
 	name := strconv.FormatUint(rand.Uint64(), 36)
-	id := wo.Vgo.CreateFontFromMemory(name, font, 0)
-	wo.nvgofontids = append(wo.nvgofontids, id)
+	f, err := newFont(wo.Vgo, font, name)
+	if err != nil {
+		panic(err)
+	}
 	if wo.capmap == nil {
 		wo.capmap = map[int]float64{}
 	}
-	wo.capmap[id] = capk
+	wo.nvgofontids = append(wo.nvgofontids, f.Vgoid)
 
 	return func(size float64, str string) Sorm {
 		s := wo.newSorm()
 		s.tag = kind
 		s.H = size
-		s.fontid = id
+		s.vecfont = f
+		s.fontid = f.Vgoid
 		wo.Vgo.SetFontFaceID(s.fontid)
-		wo.Vgo.SetFontSize(float32(size * wo.capmap[id]))
+		wo.Vgo.SetFontSize(float32(f.Captoem(size)))
 		_, abcd := wo.Vgo.TextBounds(0, 0, str)
 		_, space := wo.Vgo.TextBounds(0, 0, " ")
 		s.W = float64(abcd[2]-abcd[0]) - float64(space[2]-space[0])
@@ -630,7 +638,7 @@ func generaltextrun(kind tagkind) func(wo *World, s *Sorm) {
 		if horizontal {
 			// Adjust baseline so 0y0 is top left.
 			wo.Vgo.SetTransform(nanovgo.TranslateMatrix(float32(s.x), float32(s.y)+float32(s.H)))
-			wo.Vgo.SetFontSize(float32(s.H * wo.capmap[s.fontid]))
+			wo.Vgo.SetFontSize(float32(s.vecfont.Captoem(s.H)))
 		} else {
 			wo.Vgo.SetTransform(nanovgo.TranslateMatrix(float32(s.x), float32(s.y)))
 			if kind == tagTopDownText {
@@ -638,7 +646,7 @@ func generaltextrun(kind tagkind) func(wo *World, s *Sorm) {
 			} else if kind == tagBottomUpText {
 				wo.Vgo.SetTransform(nanovgo.RotateMatrix(-nanovgo.PI / 2))
 			}
-			wo.Vgo.SetFontSize(float32(s.W * wo.capmap[s.fontid]))
+			wo.Vgo.SetFontSize(float32(s.vecfont.Captoem(s.W)))
 		}
 		wo.Vgo.SetFontFaceID(s.fontid)
 		wo.Vgo.SetFillPaint(s.fill)
@@ -649,7 +657,7 @@ func generaltextrun(kind tagkind) func(wo *World, s *Sorm) {
 
 func (wo *World) NewVectorText(font []byte) func(size float64, str []rune) Sorm {
 	name := strconv.FormatUint(rand.Uint64(), 36)
-	id, err := NewFont(font, name)
+	id, err := newFont(wo.Vgo, font, name)
 	if err != nil {
 		panic(err)
 	}
@@ -1100,9 +1108,6 @@ func noaligner(wo *World, c *Sorm) {
 	}
 	for i := range c.kids(wo) {
 		k := &c.kids(wo)[i]
-		// if k.z == 44 {
-		// 	runtime.Breakpoint()
-		// }
 		stretch := false
 		if k.W < 0 {
 			k.W = c.wl
@@ -1118,8 +1123,11 @@ func noaligner(wo *World, c *Sorm) {
 			wo.apply(c, k)
 		}
 	}
-	// c.wl = c.W
-	// c.hl = c.H
+	for i := range c.kids(wo) {
+		k := &c.kids(wo)[i]
+		c.W = max(c.W, k.W)
+		c.H = max(c.H, k.H)
+	}
 }
 
 func vfollowaligner(wo *World, c *Sorm) {
