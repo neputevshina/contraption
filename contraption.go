@@ -986,6 +986,11 @@ func betweenrun(wo *World, s, m *Sorm) {
 	// Between is the special case and handled in Compound()
 }
 
+// BetweenVoid adds a Void between every other shape of a compound.
+func (wo *World) BetweenVoid(w, h float64) (s Sorm) {
+	return wo.Between(func() Sorm { return wo.Void(w, h) })
+}
+
 // Source marks area of current compound as a drag source.
 // It uses compound's identity (set with Identity modifier) as a drag value.
 func (wo *World) Source() (s Sorm) {
