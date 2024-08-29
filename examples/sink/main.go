@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/neputevshina/contraption"
@@ -196,6 +197,9 @@ func (wo *World) Numbox(v *float64) Sorm {
 			wo.Void(-1, -1),
 			wo.Rectangle(-*v, -1).Fill(yellow)),
 		wo.Cond(func(m contraption.Matcher) {
+			if m.Nochoke().Duration(300 * time.Millisecond).Match(`Click(1):in .* Unclick(1):in Click(1):in`) {
+				*v = 0
+			}
 			if m.Nochoke().Match(`Click(1):in`) {
 				wo.Window.SetInputMode(glfw.CursorMode, glfw.CursorDisabled)
 				*wo.Key(v) = wo.Trace[0].Pt.Y
