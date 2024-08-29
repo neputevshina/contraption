@@ -385,6 +385,7 @@ func (s Sorm) Stroke(p nanovgo.Paint) Sorm {
 
 func (s Sorm) Strokewidth(w float32) Sorm {
 	s.strokew = w
+	s.flags |= flagSetStrokewidth
 	return s
 }
 
@@ -1926,5 +1927,6 @@ func New(config Config) (wo World) {
 
 	wo.Events = NewEventTracer(wo.Window.window, config.ReplayReader)
 	wo.sinks = make([]func(any), 1)
+	wo.keys = map[any]*labelt{}
 	return wo
 }
