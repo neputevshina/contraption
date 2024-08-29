@@ -192,16 +192,15 @@ func (wo *World) Numbox(v *float64) Sorm {
 		wo.Halign(0.5),
 		wo.Valign(0.5),
 		wo.Rectangle(-1, 20).Fill(dark),
-		wo.Identity(v),
 		wo.Compound(
 			wo.Void(-1, -1),
-			wo.Rectangle(wo.Prevkey(v).W**v, -1).Fill(yellow)),
+			wo.Rectangle(-*v, -1).Fill(yellow)),
 		wo.Cond(func(m contraption.Matcher) {
 			if m.Nochoke().Match(`Click(1):in`) {
 				wo.Window.SetInputMode(glfw.CursorMode, glfw.CursorDisabled)
 				*wo.Key(v) = wo.Trace[0].Pt.Y
 			}
-			// TODO This match it for some reason chokes sliders by choking drag and drop regexp,
+			// TODO This match for some reason chokes sliders by choking drag and drop regexp,
 			// though not being above sliders so it is Nochoke.
 			// Investigate and fix.
 			if m.Nochoke().Match(`!Unclick(1)* Click(1):in`) {
