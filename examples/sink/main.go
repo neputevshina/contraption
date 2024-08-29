@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/neputevshina/contraption"
 	"github.com/neputevshina/geom"
@@ -20,6 +21,8 @@ var (
 )
 
 var (
+	scale = 1.0
+
 	slider0 = 0.0
 	slider1 = 1.0
 )
@@ -31,20 +34,50 @@ func main() {
 	wo.Text = wo.NewVectorText(goregular.TTF)
 
 	for wo.Next() {
+		if wo.Match(`!Release(Ctrl)* Press(Ctrl)`) {
+			if wo.Match(`Scroll(-1)`) {
+				scale += 0.1
+			}
+			if wo.Match(`Scroll(+1)`) {
+				scale -= 0.1
+			}
+			if wo.Match(`Press(E)`) {
+				scale = 1
+			}
+		}
+
 		wo.Root(
+			wo.Pretransform(geom.Scale2d(scale, scale)),
 			wo.Compound(
 				wo.Halign(0.5),
 				wo.Valign(0.5),
 				wo.Void(-1, -1),
 				wo.Examples(),
-			))
+			),
+			wo.Compound(
+				wo.Halign(0),
+				wo.Valign(1),
+				wo.Void(-1, -1),
+				wo.Compound(
+					wo.Vfollow(),
+					wo.Compound(
+						wo.Hfollow(),
+						wo.Void(5, 0),
+						wo.Label(`Ctrl+Scroll — scale interface, Ctrl+E — reset scale`),
+						wo.Void(-1, 0),
+						wo.Label(strconv.FormatFloat(scale*100, 'f', 0, 64), "%"),
+						wo.Void(5, 0),
+					),
+					wo.Void(0, 5)),
+			),
+		)
 
 		wo.Develop()
 	}
 }
 
 func (wo *World) Examples() Sorm {
-
+	// TODO Pluggable DragEffects
 	wo.DragEffect = func(interval [2]geom.Point, drag any) Sorm {
 		if f, ok := drag.(*float64); ok {
 			r := wo.Prevkey(Tag(f, 1)).Rectangle()
@@ -55,66 +88,93 @@ func (wo *World) Examples() Sorm {
 	}
 
 	return wo.Compound(
-		wo.Hfollow(),
-		wo.BetweenVoid(32, 0),
-		wo.Example(`Align child's center to container's top`, func() Sorm {
-			return wo.Compound(
-				wo.Limit(100, 100),
-				wo.Compound(
-					wo.Rectangle(-1, -1).Stroke(dark),
+		wo.Vfollow(),
+		wo.BetweenVoid(0, 64),
+		wo.Compound(
+			wo.Hfollow(),
+			wo.BetweenVoid(32, 0),
+			wo.Example(`Align child's center to container's top`, func() Sorm {
+				return wo.Compound(
+					wo.Limit(100, 100),
+					wo.Compound(
+						wo.Rectangle(-1, -1).Stroke(dark),
+						wo.Compound(
+							wo.Halign(0.5),
+							wo.Valign(0.5),
+							wo.Vshrink(),
+							wo.Void(-1, 0).Voverride(),
+							wo.Rectangle(-1, -1).Fill(yellow),
+							wo.Label(`abc`))))
+			}),
+			wo.Example(`Align child's center to container's top`, func() Sorm {
+				return wo.Compound(
+					wo.Limit(100, 100),
+					wo.Compound(
+						wo.Valign(0.5),
+						wo.Rectangle(-1, -1).Stroke(dark),
+						wo.Compound(
+							wo.Halign(0.5),
+							wo.Valign(0),
+							wo.Vshrink(),
+							wo.Void(-1, 0).Voverride(),
+							wo.Rectangle(-1, -1).Fill(yellow),
+							wo.Label(`abc`))))
+			}),
+			wo.Example(`Horizontal and vertical together`, func() Sorm {
+				return wo.Compound(
+					wo.Limit(100, 100),
 					wo.Compound(
 						wo.Halign(0.5),
 						wo.Valign(0.5),
-						wo.Vshrink(),
-						wo.Void(-1, 0).Voverride(),
-						wo.Rectangle(-1, -1).Fill(yellow),
-						wo.Label(`abc`))))
-		}),
-		wo.Example(`Align child's center to container's top`, func() Sorm {
-			return wo.Compound(
-				wo.Limit(100, 100),
-				wo.Compound(
-					wo.Valign(0.5),
-					wo.Rectangle(-1, -1).Stroke(dark),
+						wo.Rectangle(-1, -1).Stroke(dark),
+						wo.Compound(
+							wo.Halign(0.5),
+							wo.Valign(0),
+							wo.Vshrink(),
+							wo.Hshrink(),
+							wo.Rectangle(-1, -1).Fill(yellow),
+							wo.Label(`abc`))))
+			}),
+			wo.Example(`Sliders`, func() Sorm {
+				return wo.Compound(
+					wo.Vfollow(),
+					wo.BetweenVoid(0, 8),
 					wo.Compound(
-						wo.Halign(0.5),
-						wo.Valign(0),
-						wo.Vshrink(),
-						wo.Void(-1, 0).Voverride(),
-						wo.Rectangle(-1, -1).Fill(yellow),
-						wo.Label(`abc`))))
-		}),
-		wo.Example(`Horizontal and vertical together`, func() Sorm {
-			return wo.Compound(
-				wo.Limit(100, 100),
-				wo.Compound(
-					wo.Halign(0.5),
-					wo.Valign(0.5),
-					wo.Rectangle(-1, -1).Stroke(dark),
+						wo.Limit(200, 20),
+						wo.Slider(&slider0),
+					),
 					wo.Compound(
-						wo.Halign(0.5),
-						wo.Valign(0),
-						wo.Vshrink(),
-						wo.Hshrink(),
-						wo.Rectangle(-1, -1).Fill(yellow),
-						wo.Label(`abc`))))
-		}),
-		wo.Example(`Sliders`, func() Sorm {
-			return wo.Compound(
-				wo.Vfollow(),
-				wo.BetweenVoid(0, 8),
-				wo.Compound(
-					wo.Limit(200, 20),
-					wo.Slider(&slider0),
-				),
-				wo.Compound(
-					wo.Limit(100, 20),
-					wo.Slider(&slider1)))
-		}),
-	)
+						wo.Limit(100, 20),
+						wo.Slider(&slider1)))
+			}),
+		),
+		wo.Compound(
+			wo.Hfollow(),
+			wo.BetweenVoid(32, 0),
+			wo.Example(`Stretch`, func() Sorm {
+				return wo.Compound(
+					wo.Limit(100, 100),
+					wo.Compound(
+						wo.Hfollow(),
+						wo.Rectangle(-1, -1).Stroke(dark),
+						wo.Rectangle(-2, -1).Stroke(dark),
+						wo.Compound(
+							// TODO Ways to determine size of a compound if all of
+							// its members are stretchy.
+							wo.Hfollow(),
+							wo.Limit(20, 0),
+							wo.Rectangle(-1, -1).Stroke(dark),
+							wo.Rectangle(-1, -1).Stroke(dark),
+						),
+					))
+			}),
+		))
 }
 
 func (wo *World) Slider(v *float64) Sorm {
+	// Here I use drag-and-drop mechanics to implement Slider, but it can be implemented with Cond,
+	// not using DragEffect.
+	// Feedback is used in both cases.
 	return wo.Compound(
 		wo.Halign(*v),
 		wo.Valign(0.5),
