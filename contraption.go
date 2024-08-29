@@ -128,6 +128,7 @@ const (
 	flagFindme
 	flagHshrink
 	flagVshrink
+	flagSetStrokewidth
 )
 
 //go:generate stringer -type=tagkind -trimprefix=tag
@@ -925,6 +926,7 @@ func (wo *World) Strokewidth(w float64) (s Sorm) {
 	return
 }
 func strokewidthrun(wo *World, s, m *Sorm) {
+	s.flags |= flagSetStrokewidth
 	for i := range s.kids(wo) {
 		if s.kids(wo)[i].tag > 0 {
 			s.kids(wo)[i].strokew = m.strokew
@@ -1650,7 +1652,7 @@ func (wo *World) Develop() {
 			if kid.stroke == (nanovgo.Paint{}) {
 				kid.stroke = s.stroke
 			}
-			if kid.strokew == 0 {
+			if kid.flags&flagSetStrokewidth == 0 {
 				kid.strokew = s.strokew
 			}
 		}

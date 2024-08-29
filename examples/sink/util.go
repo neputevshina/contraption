@@ -1,6 +1,10 @@
 package main
 
-import "github.com/neputevshina/nanovgo"
+import (
+	"log"
+
+	"github.com/neputevshina/nanovgo"
+)
 
 func hex(s string) (c nanovgo.Color) {
 	if !(len(s) == 9 || len(s) == 7) || s[0] != '#' {
@@ -26,3 +30,9 @@ func hex(s string) (c nanovgo.Color) {
 func paint(c nanovgo.Color) nanovgo.Paint { return nanovgo.LinearGradient(0, 0, 1, 1, c, c) }
 
 func hexpaint(s string) nanovgo.Paint { return paint(hex(s)) }
+
+var println = log.Println
+
+func lerp(a, b, c float64) float64 {
+	return a*(1-c) + b*c
+}
