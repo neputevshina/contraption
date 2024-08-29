@@ -1103,10 +1103,17 @@ func pretransformrun(wo *World, c, m *Sorm) {
 
 // If a Compound has no aligner set (“stack” layout)
 func noaligner(wo *World, c *Sorm) {
+	minp := Point{}
 	for i := range c.kids(wo) {
 		k := &c.kids(wo)[i]
 		c.W = max(c.W, k.W)
 		c.H = max(c.H, k.H)
+		if k.W < 0 {
+			minp.X = min(minp.X, k.W)
+		}
+		if k.H < 0 {
+			minp.Y = min(minp.Y, k.H)
+		}
 	}
 	if c.flags&flagHshrink > 0 {
 		c.wl = c.W
@@ -1118,11 +1125,11 @@ func noaligner(wo *World, c *Sorm) {
 		k := &c.kids(wo)[i]
 		stretch := false
 		if k.W < 0 {
-			k.W = c.wl
+			k.W = c.wl * k.W / minp.X
 			stretch = true
 		}
 		if k.H < 0 {
-			k.H = c.hl
+			k.H = c.hl * k.H / minp.Y
 			stretch = true
 		}
 		if stretch {
