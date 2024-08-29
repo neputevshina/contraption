@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/neputevshina/contraption"
 	"github.com/neputevshina/geom"
 	"golang.org/x/image/font/gofont/goregular"
@@ -25,6 +26,8 @@ var (
 
 	slider0 = 0.0
 	slider1 = 1.0
+
+	numbox = 0.3
 )
 
 func main() {
@@ -65,7 +68,12 @@ func main() {
 						wo.Void(5, 0),
 						wo.Label(`Ctrl+Scroll — scale interface, Ctrl+E — reset scale`),
 						wo.Void(-1, 0),
-						wo.Label(strconv.FormatFloat(scale*100, 'f', 0, 64), "%"),
+						wo.Label(strconv.FormatFloat(scale*100, 'f', 0, 64), "%").
+							Cond(func(m contraption.Matcher) {
+								if m.Match(`Click:in`) {
+									scale = 1.0
+								}
+							}),
 						wo.Void(5, 0),
 					),
 					wo.Void(0, 5)),
@@ -135,18 +143,6 @@ func (wo *World) Examples() Sorm {
 							wo.Rectangle(-1, -1).Fill(yellow),
 							wo.Label(`abc`))))
 			}),
-			wo.Example(`Sliders`, func() Sorm {
-				return wo.Compound(
-					wo.Vfollow(),
-					wo.BetweenVoid(0, 8),
-					wo.Compound(
-						wo.Limit(200, 20),
-						wo.Slider(&slider0),
-					),
-					wo.Compound(
-						wo.Limit(100, 20),
-						wo.Slider(&slider1)))
-			}),
 		),
 		wo.Compound(
 			wo.Hfollow(),
@@ -168,7 +164,65 @@ func (wo *World) Examples() Sorm {
 						),
 					))
 			}),
+			wo.Example(`Sliders`, func() Sorm {
+				return wo.Compound(
+					wo.Vfollow(),
+					wo.BetweenVoid(0, 8),
+					wo.Compound(
+						wo.Limit(200, 20),
+						wo.Slider(&slider0),
+					),
+					wo.Compound(
+						wo.Limit(100, 20),
+						wo.Slider(&slider1)))
+			}),
+			wo.Example(`Numbox`, func() Sorm {
+				return wo.Compound(
+					wo.Vfollow(),
+					wo.BetweenVoid(0, 8),
+					wo.Compound(
+						wo.Limit(100, 20),
+						wo.Numbox(&numbox)))
+			}),
 		))
+}
+
+func (wo *World) Numbox(v *float64) Sorm {
+	return wo.Compound(
+		wo.Halign(0.5),
+		wo.Valign(0.5),
+		wo.Rectangle(-1, 20).Fill(dark),
+		wo.Identity(v),
+		wo.Compound(
+			wo.Void(-1, -1),
+			wo.Rectangle(wo.Prevkey(v).W**v, -1).Fill(yellow)),
+		wo.Cond(func(m contraption.Matcher) {
+			if m.Match(`Click(1):in`) {
+				wo.Window.SetInputMode(glfw.CursorMode, glfw.CursorDisabled)
+				*wo.Key(v) = wo.Trace[0].Pt.Y
+			}
+			if m.Match(`!Unclick(1)* Click(1):in`) {
+				c := 0.01
+				if m.Nochoke().Match(`!Release(Shift)* Press(Shift)`) {
+					c = 0.001
+				}
+				if *wo.Key(v) != nil {
+					d := (*wo.Key(v)).(float64) - wo.Trace[0].Pt.Y
+					if d < 0 {
+						*v -= c
+					}
+					if d > 0 {
+						*v += c
+					}
+					*v = max(0, min(*v, 1))
+				}
+				*wo.Key(v) = wo.Trace[0].Pt.Y
+			}
+			if m.Match(`Unclick(1)`) {
+				wo.Window.SetInputMode(glfw.CursorMode, glfw.CursorNormal)
+			}
+		}),
+		wo.Label(strconv.FormatFloat(*v, 'f', 2, 64)))
 }
 
 func (wo *World) Slider(v *float64) Sorm {
