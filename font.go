@@ -23,22 +23,23 @@ type Font struct {
 	advcache       map[rune][3]float64
 }
 
-func newFont(vgo *nanovgo.Context, data []byte, name string) (*Font, error) {
+func NewFont(vgo *nanovgo.Context, data []byte, name string) (*Font, error) {
 	f, err := sfnt.Parse(data)
 	if err != nil {
 		return nil, err
 	}
 	f2, err := truetype.Parse(data)
-	id := vgo.CreateFontFromMemory(name, data, 0)
 	f3 := &Font{
 		Data:           data,
 		Parsed:         f,
 		FreeTypeParsed: f2,
-		Vgoid:          id,
 		Capk:           Capk(f),
 		Name:           name,
 		segcache:       map[rune][]Segment{},
 		advcache:       map[rune][3]float64{},
+	}
+	if vgo != nil {
+		f3.Vgoid = vgo.CreateFontFromMemory(name, data, 0)
 	}
 	return f3, err
 }
