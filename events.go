@@ -14,10 +14,10 @@ import (
 )
 
 type EventPoint struct {
-	E       interface{}
-	Pt      geom.Point
-	T       time.Time
-	z, zold int
+	E     interface{}
+	Pt    geom.Point
+	T     time.Time
+	z, zc int
 }
 
 func (ev EventPoint) valuestring() string {

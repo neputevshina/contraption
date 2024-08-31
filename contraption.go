@@ -3,6 +3,9 @@
 // A good user interface framework must be an engine for a word processing game.
 //
 // TODO:
+//	- File drag event: Drag(*.txt)
+//		- A companion for Drop — matches when the file is dragged above the area.
+//		- Needs changes in GLFW or changing input library.
 //	- Interactive views for very large 1d and 2d data: waveforms, giant Minecraft maps, y-log STFT frames, etc.
 //		- Why? Try to display STFT of a music file using Matplotlib, then rescale the window. Enjoy the wait.
 //	- Text area
@@ -121,7 +124,7 @@ import (
 type flagval uint
 
 const (
-	flagSourcerun flagval = 1 << iota
+	flagSource flagval = 1 << iota
 	flagOvrx
 	flagOvry
 	flagBetweener
@@ -278,7 +281,7 @@ type Equation interface {
 }
 
 type Sorm struct {
-	z               int
+	z, i            int
 	tag             tagkind
 	flags           flagval
 	W, H, r, wl, hl float64
@@ -419,7 +422,7 @@ func (s Sorm) Cond(f func(Matcher)) Sorm {
 
 func (s Sorm) Lmb(wo *World, f func()) Sorm {
 	s.cond = func(m Matcher) {
-		if m.Match(`Click(1):in`) {
+		if m.Nochoke().Match(`Click(1):in`) {
 			f()
 		}
 	}
@@ -1004,7 +1007,7 @@ func (wo *World) Source() (s Sorm) {
 	return
 }
 func sourcerun(wo *World, s *Sorm, m *Sorm) {
-	s.flags |= flagSourcerun
+	s.flags |= flagSource
 }
 
 // Sink marks area of current compound as a drag sink.
@@ -1607,6 +1610,7 @@ func (wo *World) Develop() {
 
 	reachCheck(wo, pool)
 	for i := range pool {
+		pool[i].i = i
 		if !(pool[i].flags&flagMark > 0) {
 			pool[i].tag = tagVoid
 			pool[i].W = 0
@@ -1694,7 +1698,7 @@ func (wo *World) Develop() {
 			s.stroke = s.condstroke(r)
 		}
 		m := wo.Events.In(r).WithZ(i + 1)
-		if s.flags&flagSourcerun > 0 {
+		if s.flags&flagSource > 0 {
 			if m.Match(`Click(1):in`) {
 				wo.drag = s.key
 				wo.dragstart = wo.Last.FirstTouch

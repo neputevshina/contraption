@@ -55,6 +55,31 @@ func main() {
 
 		wo.Root(
 			wo.Pretransform(geom.Scale2d(scale, scale)),
+			wo.Sequence(
+				contraption.SliceSequence2(wo.Trace, func(i int) contraption.Sorm {
+					p := `#00000000`
+					h := 1.0
+					switch wo.Trace[i].E.(type) {
+					case contraption.Click:
+						p = `#00ff00`
+					case contraption.Unclick:
+						p = `#00ff00`
+						h = 0.5
+					case contraption.Press:
+						p = `#ff0000`
+					case contraption.Release:
+						p = `#ff0000`
+						h = 0.5
+					case contraption.Hover:
+						p = `#00000000`
+					case contraption.Drop:
+						p = `#ff00ff`
+					}
+					return wo.Rectangle(-1, -h).Fill(hexpaint(p))
+				}),
+				wo.Limit(0, 10),
+				wo.Hfollow(),
+				wo.Valign(0)),
 			wo.Compound(
 				wo.Halign(0.5),
 				wo.Valign(0.5),
@@ -240,7 +265,7 @@ func (wo *World) Numbox(v *float64) Sorm {
 			// TODO This match for some reason chokes sliders by choking drag and drop regexp,
 			// though not being above sliders so it is Nochoke.
 			// Investigate and fix.
-			if m.Nochoke().Match(`!Unclick(1)* Click(1):in`) {
+			if m.Match(`!Unclick(1)* Click(1):in`) {
 				c := 0.001
 				if m.Nochoke().Match(`!Release(Shift)* Press(Shift)`) {
 					c = 0.0001
