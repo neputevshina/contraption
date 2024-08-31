@@ -3,7 +3,6 @@ module github.com/neputevshina/contraption/examples/sink
 go 1.22.5
 
 replace github.com/neputevshina/contraption => ../../
-replace github.com/neputevshina/nanovgo => ../../../nanovgo
 
 require github.com/neputevshina/contraption v0.0.0-20240826020825-d198aacddaff
 
