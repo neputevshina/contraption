@@ -220,6 +220,7 @@ func rvisit(n, p *node32, pattern []rune) []rinst {
 
 // rinterp is the threaded regular expression bytecode vm taken from https://swtch.com/~rsc/regexp/regexp2.html#thompsonvm.
 func rinterp(program []rinst, trace []EventPoint, rect geom.Rectangle, dur time.Duration, deadline time.Time, z int) (bool, EventTraceLast) {
+	// println(`rinterp`)
 	type rthread = int
 	cs := make([]rthread, 0, len(program))
 	ns := make([]rthread, 0, len(program))
@@ -241,8 +242,7 @@ func rinterp(program []rinst, trace []EventPoint, rect geom.Rectangle, dur time.
 					if z <= 0 {
 						return
 					}
-					trace[j].zold = trace[j].z
-					trace[j].z = z
+					trace[j].zc = z
 				}()
 				// // This comparison is dependent on the Cond evaluation order in (*World).Develop.
 				if v.in && !sv.Pt.In(rect) {
@@ -299,11 +299,11 @@ func rinterp(program []rinst, trace []EventPoint, rect geom.Rectangle, dur time.
 					Box:        box,
 					FirstTouch: sv.Pt,
 				}
-				// Make zold not reset if match was successful.
+				// Set z candidates to z because we matched.
 				defer func() {
 					for j := range trace {
-						if trace[j].z == z {
-							trace[j].zold = z
+						if trace[j].zc == z {
+							trace[j].z = trace[j].zc
 						}
 					}
 				}()
@@ -321,10 +321,7 @@ func rinterp(program []rinst, trace []EventPoint, rect geom.Rectangle, dur time.
 		cs, ns = ns, cs
 		ns = ns[:0]
 	}
-	// Match was unsuccessful, reset orders.
-	for j := range trace {
-		trace[j].z = trace[j].zold
-	}
+
 	return false, EventTraceLast{Choked: choked}
 }
 

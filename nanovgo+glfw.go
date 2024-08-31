@@ -216,6 +216,9 @@ func requals(p EventPoint, inst *rinst) bool {
 	pd, ok1 := p.E.(Drop)
 	id, ok2 := inst.e.(Drop)
 	if ok1 && ok2 && sametype {
+		if pd.mime == `` {
+			return true
+		}
 		for _, f := range pd.Paths {
 			t, err := filetype.MatchFile(f)
 			if err != nil {

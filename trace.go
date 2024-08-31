@@ -292,7 +292,7 @@ func (u *Events) next() bool {
 func (u *Events) develop() {
 	for i := range u.tr {
 		u.tr[i].z = 0
-		u.tr[i].zold = 0
+		u.tr[i].zc = 0
 	}
 }
 
