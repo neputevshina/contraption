@@ -3,6 +3,8 @@
 // A good user interface framework must be an engine for a word processing game.
 //
 // TODO:
+//	- Interactive views for very large 1d and 2d data: waveforms, giant Minecraft maps, y-log STFT frames, etc.
+//		- Why? Try to display STFT of a music file using Matplotlib, then rescale the window. Enjoy the wait.
 //	- Text area
 //		- https://rxi.github.io/textbox_behaviour.html
 //	- Sequence must be a special shape that pastes Sorms inside a compound, not being compound itself
@@ -599,7 +601,7 @@ func (wo *World) NewBottomUpText(font []byte, capk float64) func(size float64, s
 
 func (wo *World) generalNewText(font []byte, capk float64, kind tagkind) func(size float64, str string) Sorm {
 	name := strconv.FormatUint(rand.Uint64(), 36)
-	f, err := newFont(wo.Vgo, font, name)
+	f, err := NewFont(wo.Vgo, font, name)
 	if err != nil {
 		panic(err)
 	}
@@ -659,7 +661,7 @@ func generaltextrun(kind tagkind) func(wo *World, s *Sorm) {
 
 func (wo *World) NewVectorText(font []byte) func(size float64, str []rune) Sorm {
 	name := strconv.FormatUint(rand.Uint64(), 36)
-	id, err := newFont(wo.Vgo, font, name)
+	id, err := NewFont(wo.Vgo, font, name)
 	if err != nil {
 		panic(err)
 	}

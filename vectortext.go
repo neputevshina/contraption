@@ -32,6 +32,10 @@ func MakealineStrict(vg *nanovgo.Context, font *Font, size float64, runes []rune
 }
 
 func makealine(vg *nanovgo.Context, font *Font, size float64, runes []rune, extendedBox bool) float64 {
+	if len(runes) == 0 {
+		return 0
+	}
+
 	x := -font.Advance(runes[0]) + font.Width(runes[0])
 	if extendedBox {
 		// x = 0
@@ -62,6 +66,9 @@ func makealine(vg *nanovgo.Context, font *Font, size float64, runes []rune, exte
 func (font *Font) Measure(size float64, runes []rune) float64 {
 	size = font.Emtocap(size)
 	x := 0.0
+	if len(runes) == 0 {
+		return 0
+	}
 	for _, r := range runes {
 		x += font.Advance(r) * size
 	}
