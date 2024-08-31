@@ -30,7 +30,8 @@ var (
 
 	numbox = 0.3
 
-	filename = ""
+	filename0 = ""
+	filename1 = ""
 )
 
 func main() {
@@ -184,25 +185,40 @@ func (wo *World) Examples() Sorm {
 					wo.Limit(100, 20),
 					wo.Numbox(&numbox))
 			}),
-			wo.Example(`File drop`, func() Sorm {
-				return wo.Compound(
-					wo.Hshrink(),
-					wo.Halign(0.5),
-					wo.Rectangle(-1, 20).Fill(yellow),
-					wo.Compound(
-						wo.Hfollow(),
-						wo.Valign(0.5),
-						wo.Void(10, 20),
-						wo.Label(filename),
-						wo.Void(10, 20),
-					)).
-					Cond(func(m contraption.Matcher) {
-						if m.Match(`Drop:in`) {
-							filename = wo.Trace[0].E.(contraption.Drop).Paths[0]
-						}
-					})
-			}),
+			wo.Compound(
+				wo.Vfollow(),
+				wo.BetweenVoid(0, 8),
+				wo.Example(`File drop`, func() Sorm {
+					return wo.Drop(&filename0, ``)
+				}),
+				wo.Example(`File drop, but only for MP3s`, func() Sorm {
+					return wo.Drop(&filename1, `audio/mpeg`)
+				}),
+			),
 		))
+}
+
+func (wo *World) Drop(filename *string, mime string) Sorm {
+	return wo.Compound(
+		wo.Hshrink(),
+		wo.Halign(0.5),
+		wo.Rectangle(-1, 20).Fill(yellow),
+		wo.Compound(
+			wo.Hfollow(),
+			wo.Valign(0.5),
+			wo.Void(10, 20),
+			wo.Label(*filename),
+			wo.Void(10, 20),
+		)).
+		Cond(func(m contraption.Matcher) {
+			pat := `Drop:in`
+			if mime != `` {
+				pat = `Drop(` + mime + `):in`
+			}
+			if m.Match(pat) {
+				*filename = wo.Trace[0].E.(contraption.Drop).Paths[0]
+			}
+		})
 }
 
 func (wo *World) Numbox(v *float64) Sorm {
