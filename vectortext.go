@@ -48,7 +48,7 @@ func makealine(vg *nanovgo.Context, font *Font, size float64, runes []rune, exte
 		x += m
 	}
 	vg.Save()
-	vg.Scale(float32(font.Emtocap(size)), float32(font.Emtocap(size)))
+	vg.Scale(float32(font.Captoem(size)), float32(font.Captoem(size)))
 	for _, r := range runes {
 		vg.Save()
 
@@ -64,7 +64,7 @@ func makealine(vg *nanovgo.Context, font *Font, size float64, runes []rune, exte
 }
 
 func (font *Font) Measure(size float64, runes []rune) float64 {
-	size = font.Emtocap(size)
+	size = font.Captoem(size)
 	x := 0.0
 	if len(runes) == 0 {
 		return 0

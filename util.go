@@ -19,7 +19,6 @@ import (
 	"github.com/neputevshina/nanovgo"
 	"golang.design/x/clipboard"
 	"golang.org/x/exp/constraints"
-	"golang.org/x/image/font"
 	"golang.org/x/image/font/sfnt"
 	"golang.org/x/image/math/fixed"
 )
@@ -293,28 +292,6 @@ func cond[T any](p bool, a T, b T) T {
 
 func last[T any](s []T) *T {
 	return &s[len(s)-1]
-}
-
-// Capk возвращает коэффициент, на который нужно умножить размер шрифта
-// в пунктах размера прописной буквы, чтобы получить размер этого
-// шрифта в пунктах в em.
-// Если в шрифтовом файле указан размер прописной, то для рассчётов
-// используется он.
-// В противном случае используется размер латинской прописной буквы H.
-//
-// Capk паникует на любых ошибках.
-// Ожидается, что шрифтовой файл полностью загружен в память.
-func Capk(fnt *sfnt.Font) fixed.Int26_6 {
-	buf := sfnt.Buffer{}
-	g, err := fnt.GlyphIndex(&testingBuffer, 'H')
-	if err != nil {
-		panic(err)
-	}
-	bo, _, err := fnt.GlyphBounds(&buf, g, 72<<6, font.HintingNone)
-	if err != nil {
-		panic(err)
-	}
-	return fixeddiv(72<<6, -bo.Min.Y)
 }
 
 func fixeddiv(p, q fixed.Int26_6) fixed.Int26_6 {
