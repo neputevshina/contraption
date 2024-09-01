@@ -15,12 +15,14 @@ type Font struct {
 	Parsed         *sfnt.Font
 	FreeTypeParsed *truetype.Font
 	Vgoid          int
-	Capk           fixed.Int26_6
 	Name           string
-	capmap0        int
-	capmap         []int
-	segcache       map[rune][]Segment
-	advcache       map[rune][3]float64
+
+	vgok     float64
+	capmap0  int
+	capmap   []int
+	segcache map[rune][]Segment
+	advcache map[rune][3]float64
+	buf      sfnt.Buffer
 }
 
 func NewFont(vgo *nanovgo.Context, data []byte, name string) (*Font, error) {
@@ -33,7 +35,6 @@ func NewFont(vgo *nanovgo.Context, data []byte, name string) (*Font, error) {
 		Data:           data,
 		Parsed:         f,
 		FreeTypeParsed: f2,
-		Capk:           Capk(f),
 		Name:           name,
 		segcache:       map[rune][]Segment{},
 		advcache:       map[rune][3]float64{},
@@ -41,22 +42,30 @@ func NewFont(vgo *nanovgo.Context, data []byte, name string) (*Font, error) {
 	if vgo != nil {
 		f3.Vgoid = vgo.CreateFontFromMemory(name, data, 0)
 	}
+	k := 1.0
+	if vgo != nil {
+		k = f3.getvgok(vgo)
+	}
+	f3.vgok = k
 	return f3, err
 }
 
-func (f *Font) CaptoemFixed(cap float64) fixed.Int26_6 {
+func (f *Font) getvgok(vgo *nanovgo.Context) float64 {
+	return float64(f.FreeTypeParsed.VMetric(72<<6, f.FreeTypeParsed.Index('H')).TopSideBearing) / (72 << 6)
+}
+
+func (f *Font) CaptoemFixed(cap fixed.Int26_6) fixed.Int26_6 {
 	// TODO Memoize?
-	buf := sfnt.Buffer{}
-	em0, em1 := 6.0, 72.0
+	em0, em1 := 0.0, 72.0
 	em := 0.0
 	fem := func() fixed.Int26_6 { return fixed.Int26_6(em * 64) }
-	for i := 0; i <= 10; i++ {
+	for i := 0; i <= 15; i++ {
 		em = (em0 + em1) / 2
-		r, err := f.Parsed.Metrics(&buf, fem(), font.HintingFull)
+		r, err := f.Parsed.Metrics(&f.buf, fem(), font.HintingNone)
 		if err != nil {
 			panic(err)
 		}
-		if float64(r.CapHeight)/64 < cap {
+		if r.CapHeight < cap {
 			em0 = em
 		} else {
 			em1 = em
@@ -66,15 +75,19 @@ func (f *Font) CaptoemFixed(cap float64) fixed.Int26_6 {
 }
 
 func (f *Font) Captoem(cap float64) float64 {
-	return float64(f.CaptoemFixed(cap)) / 64
+	return float64(f.CaptoemFixed(fixed.Int26_6(cap*64))) / 64
 }
 
 func (f *Font) EmtocapFixed(em fixed.Int26_6) float64 {
-	return float64(em.Mul(f.Capk)) / 64
+	r, err := f.Parsed.Metrics(&f.buf, em, font.HintingNone)
+	if err != nil {
+		panic(err)
+	}
+	return float64(r.CapHeight) / 64
 }
 
 func (f *Font) Emtocap(em float64) float64 {
-	return em * float64(f.Capk) / 64
+	return f.EmtocapFixed(fixed.Int26_6(em * 64))
 }
 
 // func (f *Font) Rune(size float64, r rune) *gel.Texture {
