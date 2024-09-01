@@ -3,6 +3,9 @@
 // A good user interface framework must be an engine for a word processing game.
 //
 // TODO:
+//	- Display sinks on F2 view. Make it configurable also.
+//	- Stylus events
+//		- Touch(<50), Touch(>= 10) — threshold for pressure
 //	- File drag event: Drag(*.txt)
 //		- A companion for Drop — matches when the file is dragged above the area.
 //		- Needs changes in GLFW or changing input library.
@@ -27,6 +30,12 @@
 //		- Just create a special component for this, dumb ass
 //		- func Huniform(...Sorm) Sorm
 //		- func Vuniform(...Sorm) Sorm
+//		- Can use new negative value behavior? Just make needed widths/heights equal negative values.
+//		- Integer key to determine which sizes must be equal:
+//			- func Eqkey() Eqkey
+//			- func Hequal(Eqkey) Sorm
+//			- func Vequal(Eqkey) Sorm
+//		- Can be used to implement grid layout.
 //		- Other proposed names: Hequalize, Vequalize
 //	- Subworlds — layout inside canvases
 //	- Modifier to shape position independence
@@ -67,6 +76,7 @@
 //	- func Retain(Sorm) (Sorm, struct{})   // Second returned value is needed only to restrict user from pasting
 //	- func Deploy(Sorm) (Sorm, struct{})  // it directly to Compound. Because it will break slices.
 //	- Other backends: Gio, software
+//		- https://rxi.github.io/cached_software_rendering.html
 //	~ func Whereis(Sorm) Sorm — prints where object is on overlay for debug
 //	- func Target(onScreen *bool) Sorm
 //	- Commenting the interface
@@ -825,10 +835,10 @@ func canvasrun(wo *World, s *Sorm) {
 	vgo := wo.Vgo
 
 	vgo.Save()
-	if s.r > 0 {
-		vgo.SetTransform(geom2nanovgo(s.prem))
-	}
 	vgo.Reset()
+	if s.r > 0 {
+		vgo.SetTransform(geom2nanovgo(s.m.Translate(s.x, s.y)))
+	}
 	if s.fill != (nanovgo.Paint{}) {
 		vgo.SetFillPaint(s.fill)
 	}
@@ -837,7 +847,6 @@ func canvasrun(wo *World, s *Sorm) {
 	}
 	vgo.SetStrokeWidth(s.strokew)
 	s.canvas(vgo, geom.Rect(s.x, s.y, s.x+s.W, s.y+s.H))
-	vgo.Reset()
 	vgo.Restore()
 }
 
