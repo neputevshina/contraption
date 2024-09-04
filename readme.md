@@ -72,3 +72,7 @@ if wo.Events.Match(`Press(I) !Release(Ctrl)* !Release(Shift)* Press(Shift) !Rele
 - Refine regexp interface (key word is `:anywhere`)
 
 See also top comment in `contraption.go` 
+
+# Acknowledgements
+
+Данный проект разрабатывался в рамках реализации гранта УМНИК [Фонда Содействия Инновациям](https://fasie.ru/programs/programma-umnik/). Номер договора 18384ГУ/2023.
