@@ -39,6 +39,8 @@ func main() {
 		World: contraption.New(contraption.Config{}),
 	}
 	wo.Text = wo.NewVectorText(goregular.TTF)
+	f, _ := contraption.NewFont(nil, goregular.TTF, "")
+	println(f.Captoem(53))
 
 	for wo.Next() {
 		if wo.Match(`!Release(Ctrl)* Press(Ctrl)`) {
@@ -220,8 +222,39 @@ func (wo *World) Examples() Sorm {
 					return wo.Drop(&filename1, `audio/mpeg`)
 				}),
 			),
-			wo.Example(`A`, func() Sorm {
-				return Sorm{}
+			wo.Example(`Labels`, func() Sorm {
+				return wo.Compound(
+					wo.Vfollow(),
+					wo.BetweenVoid(0, 15),
+					wo.Compound(
+						wo.Hfollow(),
+						wo.BetweenVoid(10, 0),
+						wo.Label(`Q`),
+						wo.Label(`W`),
+						wo.Label(`E`),
+						wo.Label(`R`),
+						wo.Label(`T`)),
+					wo.Compound(
+						wo.Hfollow(),
+						wo.BetweenVoid(10, 0),
+						wo.Label(`Y`),
+						wo.Label(`U`),
+						wo.Label(`I`),
+						wo.Label(`O`),
+						wo.Label(`P`),
+						wo.Label(`x`),
+					),
+					wo.Compound(
+						wo.Hfollow(),
+						wo.BetweenVoid(10, 0),
+						wo.Label(`A`),
+						wo.Label(`H`),
+						wo.Label(`AH`),
+						wo.Label(`Ah`),
+						wo.Label(`Ap`),
+						wo.Label(`p`),
+						wo.Label(`pp`),
+					))
 			}),
 		))
 }

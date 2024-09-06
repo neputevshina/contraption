@@ -548,6 +548,8 @@ type World struct {
 	dragstart  geom.Point
 	sinks      []func(any)
 	DragEffect func(interval [2]geom.Point, drag any) Sorm
+
+	showOutlines bool
 }
 
 // BaseWorld returns itself.
@@ -1762,8 +1764,10 @@ func (wo *World) Develop() {
 
 	wo.Vgo.Reset()
 
-	// Show bounding boxes while holding F2.
-	if wo.Events.MatchIndef(`!Release(F2)* Press(F2)`) {
+	if wo.Match(`Press(F2)`) {
+		wo.showOutlines = !wo.showOutlines
+	}
+	if wo.showOutlines {
 		vgo.SetStrokeWidth(1)
 		vgo.SetStrokePaint(hexpaint(`#00000020`))
 		vgo.BeginPath()

@@ -322,6 +322,14 @@ func fold0[T, J any](over []T, f func(a J, b T) (c J)) J {
 	return out
 }
 
+func fold1[T any](over []T, f func(a T, b T) (c T)) T {
+	out := over[0]
+	for i := range over {
+		out = f(out, over[i])
+	}
+	return out
+}
+
 func sum[T constraints.Float](s []T) T {
 	return fold0(s, func(a, b T) T { return a + b })
 }

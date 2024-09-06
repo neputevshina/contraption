@@ -17,12 +17,13 @@ type Font struct {
 	Vgoid          int
 	Name           string
 
-	vgok     float64
-	capmap0  int
-	capmap   []int
-	segcache map[rune][]Segment
-	advcache map[rune][3]float64
-	buf      sfnt.Buffer
+	vgok      float64
+	capmap0   int
+	capmap    []int
+	segcache  map[rune][]Segment
+	advcache  map[rune][3]float64
+	minxcache map[rune]float64
+	buf       sfnt.Buffer
 }
 
 func NewFont(vgo *nanovgo.Context, data []byte, name string) (*Font, error) {
@@ -38,6 +39,7 @@ func NewFont(vgo *nanovgo.Context, data []byte, name string) (*Font, error) {
 		Name:           name,
 		segcache:       map[rune][]Segment{},
 		advcache:       map[rune][3]float64{},
+		minxcache:      map[rune]float64{},
 	}
 	if vgo != nil {
 		f3.Vgoid = vgo.CreateFontFromMemory(name, data, 0)
@@ -141,6 +143,12 @@ func (f *Font) Segments(r rune) []Segment {
 		}
 		f.segcache[r] = collect(oldsegs, func(seg sfnt.Segment) Segment { return gelSegmentFromSfnt(int(seg.Op), seg.Args) })
 		o = f.segcache[r]
+		if len(o) > 0 {
+			f.minxcache[r] = o[0].LastComponent().X
+			for _, seg := range o[1:] {
+				f.minxcache[r] = min(f.minxcache[r], seg.LastComponent().X)
+			}
+		}
 	}
 	return o
 }
@@ -149,13 +157,13 @@ func (f *Font) Advance(r rune) float64 {
 	o, ok := f.advcache[r]
 	if !ok {
 		g, _ := f.Parsed.GlyphIndex(&testingBuffer, r)
-		bo, adv, err := f.Parsed.GlyphBounds(&testingBuffer, g, 12<<6, font.HintingNone)
+		bo, adv, err := f.Parsed.GlyphBounds(&testingBuffer, g, 120<<6, font.HintingNone)
 		if err != nil {
 			panic(err)
 		}
-		fadv := float64(adv) / (12 << 6)
-		fmaxx := float64(bo.Max.X) / (12 << 6)
-		fwidth := fmaxx - float64(bo.Min.X)/(12<<6)
+		fadv := float64(adv) / (120 << 6)
+		fmaxx := float64(bo.Max.X) / (120 << 6)
+		fwidth := fmaxx - float64(bo.Min.X)/(120<<6)
 		f.advcache[r] = [...]float64{fadv, fwidth, fmaxx}
 		o = f.advcache[r]
 	}
@@ -180,6 +188,12 @@ func (f *Font) PureAdvance(r rune) float64 {
 	return o[2]
 }
 
+func (f *Font) TrueXBearing(r rune) float64 {
+	// _ = f.Segments(r)
+	// return max(0, -f.minxcache[r])
+	return f.Width(r) - f.PureAdvance(r)
+}
+
 func Replay(vg *nanovgo.Context, segs []Segment) {
 	for _, s := range segs {
 		a, b, c := s.Args[0], s.Args[1], s.Args[2]
@@ -200,21 +214,21 @@ func Replay(vg *nanovgo.Context, segs []Segment) {
 }
 
 func Makealine(vg *nanovgo.Context, font *Font, size float64, runes []rune) float64 {
-	return makealine(vg, font, size, runes, false)
+	return makealine(vg, font, size, runes, false, true)
 }
 
 func MakealineStrict(vg *nanovgo.Context, font *Font, size float64, runes []rune) float64 {
-	return makealine(vg, font, size, runes, true)
+	return makealine(vg, font, size, runes, true, true)
 }
 
-func makealine(vg *nanovgo.Context, font *Font, size float64, runes []rune, extendedBox bool) float64 {
+func makealine(vg *nanovgo.Context, font *Font, cap float64, runes []rune, extendedBox bool, draw bool) float64 {
+	em := font.Captoem(cap)
 	if len(runes) == 0 {
 		return 0
 	}
 
-	x := -font.Advance(runes[0]) + font.Width(runes[0])
+	x := font.TrueXBearing(runes[0])
 	if extendedBox {
-		// x = 0
 		m := 1000.0
 		for _, s := range font.Segments(runes[0]) {
 			m = min(m, s.Args[0].X)
@@ -223,33 +237,32 @@ func makealine(vg *nanovgo.Context, font *Font, size float64, runes []rune, exte
 		}
 		x += m
 	}
-	vg.Save()
-	vg.Scale(float32(font.Captoem(size)), float32(font.Captoem(size)))
-	for _, r := range runes {
+	if draw {
 		vg.Save()
+		vg.Scale(float32(em), float32(em))
+	}
+	for i, r := range runes {
+		if draw {
+			vg.Save()
+			vg.Translate(float32(x), 0)
+			Replay(vg, font.Segments(r))
+			vg.PathWinding(nanovgo.Hole)
+			vg.Restore()
+		}
 
-		vg.Translate(float32(x), 0)
-		Replay(vg, font.Segments(r))
-		vg.PathWinding(nanovgo.Hole)
-		x += font.Advance(r)
+		if i < len(runes)-1 {
+			x += font.Advance(r)
+		} else {
+			x += font.Advance(r)
+		}
+	}
 
+	if draw {
 		vg.Restore()
 	}
-	vg.Restore()
-	return x * font.Emtocap(size)
+	return x * em
 }
 
-func (font *Font) Measure(size float64, runes []rune) float64 {
-	size = font.Captoem(size)
-	x := 0.0
-	if len(runes) == 0 {
-		return 0
-	}
-	for _, r := range runes {
-		x += font.Advance(r) * size
-	}
-	corr := -font.Advance(runes[len(runes)-1]) + font.Width(runes[len(runes)-1])
-	// corr := -font.Advance(runes[len(runes)-1]) + font.Width(runes[len(runes)-1]) -
-	// 	(font.PureAdvance(runes[0]) - font.Width(runes[0]))
-	return x + corr*size
+func (font *Font) Measure(cap float64, runes []rune) float64 {
+	return makealine(nil, font, cap, runes, false, false)
 }
