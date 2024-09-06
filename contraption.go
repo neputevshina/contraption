@@ -3,7 +3,12 @@
 // A good user interface framework must be an engine for a word processing game.
 //
 // TODO:
-//	- Display sinks on F2 view. Make it configurable also.
+//	- Progress reader for IO operations.
+//		- contraption.ProgressReader{ rd io.Reader; bytes, byteswritten int }
+//		- var _ io.Reader = &ProgressReader{}
+//		- (*ProgressReader).Remaining() float64 -> 0.0–0.1
+//		- (*ProgressReader).RemainingBytes() int
+//	- Display sinks on F2 view. Make F2 configurable also.
 //	- Stylus events
 //		- Touch(<50), Touch(>= 10) — threshold for pressure
 //	- File drag event: Drag(*.txt)

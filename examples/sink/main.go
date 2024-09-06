@@ -220,6 +220,9 @@ func (wo *World) Examples() Sorm {
 					return wo.Drop(&filename1, `audio/mpeg`)
 				}),
 			),
+			wo.Example(`A`, func() Sorm {
+				return Sorm{}
+			}),
 		))
 }
 
