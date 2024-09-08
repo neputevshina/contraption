@@ -75,4 +75,4 @@ See also top comment in `contraption.go`
 
 # Acknowledgements
 
-Данный проект разрабатывался в рамках реализации гранта УМНИК [Фонда Содействия Инновациям](https://fasie.ru/programs/programma-umnik/). Номер договора 18384ГУ/2023.
+Данный проект разрабатывался как часть реализации гранта УМНИК [Фонда Содействия Инновациям](https://fasie.ru/programs/programma-umnik/). Номер договора 18384ГУ/2023.
