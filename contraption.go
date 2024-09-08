@@ -1938,6 +1938,7 @@ type Config struct {
 }
 
 type Window struct {
+	FPS int
 	window
 }
 

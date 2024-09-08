@@ -39,6 +39,8 @@ type Events struct {
 	held       [tracelen / 2]EventPoint
 	heldcur    int
 	evuser     [tracelen]EventPoint
+	temp       [tracelen / 4]EventPoint
+	tempcur    int
 	regexps    map[string][]rinst
 	MatchCount int
 
@@ -52,6 +54,7 @@ type Events struct {
 	RecordPath string
 	records    []EventPoint
 	future     EventPoint
+	c          chan bang
 }
 
 // scrollPush pushes a new event point to the circular trace buffer and
@@ -73,8 +76,53 @@ func (u *Events) SetDeadline(t time.Time) {
 	u.deadline = t
 }
 
-// emit pushes the new event to the trace.
+func (wo *Events) next() bool {
+	now := time.Now()
+	if wo.tempcur == 0 {
+		// Don't update time on catching up events or else they won't be matched as fresh.
+		wo.Dt = wo.Now.Sub(now)
+		wo.Now = now // Current frame events are “from future” so they are fresh if deadline is “now”.
+	}
+	if wo.rec >= 2 {
+		now = <-wo.playc
+		// We need to poll events to get the window close event.
+		// If it is not done, window can't be closed in replay mode.
+		concretepoll(wo)
+	}
+
+	if wo.rec < 2 {
+		if wo.tempcur > 0 {
+			m := wo.temp[0]
+			copy(wo.temp[:], wo.temp[1:])
+			wo.trueemit(m.E, m.Pt, m.T)
+			wo.tempcur--
+		} else {
+			if wo.Now.Compare(wo.deadline) >= 0 {
+				concretewait(wo)
+			} else {
+				concretepoll(wo)
+			}
+		}
+	}
+
+	return true
+}
+
 func (u *Events) emit(ev interface{}, pt geom.Point, t time.Time) {
+	m := EventPoint{ev, pt, t, 0, 0}
+	u.temp[u.tempcur] = m
+	u.tempcur++
+}
+
+func (u *Events) develop() {
+	for i := range u.tr {
+		u.tr[i].z = 0
+		u.tr[i].zc = 0
+	}
+}
+
+// trueemit pushes the new event to the trace.
+func (u *Events) trueemit(ev interface{}, pt geom.Point, t time.Time) {
 	if _, yes := ev.(EventPoint); yes {
 		panic("can't emit EventPoint")
 	}
@@ -260,46 +308,14 @@ func (u *Events) match(pattern string, rect geom.Rectangle, dur time.Duration, d
 		u.Last = last
 		u.Last.Freshness = u.Now.Sub(u.Last.StartedAt)
 	}
-	// if pattern == `Click(1):in` && last.Choked {
-	// 	println(pattern, z)
-	// }
 	return ok
-}
-
-func (u *Events) next() bool {
-	now := time.Now()
-	if u.rec >= 2 {
-		now = <-u.playc
-		// We need to poll events to get the window close event.
-		// If it is not done, window can't be closed in replay mode.
-		concretepoll(u)
-	}
-	u.Dt = u.Now.Sub(now)
-	u.Now = now // Current frame events are “from future” so they are fresh if deadline is “now”.
-
-	if u.rec < 2 {
-		if u.Now.Compare(u.deadline) >= 0 {
-			concretewait(u)
-			concretepoll(u)
-		} else {
-			concretepoll(u)
-		}
-	}
-
-	return true
-}
-
-func (u *Events) develop() {
-	for i := range u.tr {
-		u.tr[i].z = 0
-		u.tr[i].zc = 0
-	}
 }
 
 func NewEventTracer(w *glfw.Window, replay io.Reader) *Events {
 	var u Events
 	u.heldcur = 0
 	u.regexps = map[string][]rinst{}
+	u.c = make(chan bang)
 	if replay == nil {
 		setupcallbacks(&u, w)
 	} else {
