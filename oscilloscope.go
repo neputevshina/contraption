@@ -15,7 +15,7 @@ func (wo *World) displayOscilloscope() Sorm {
 		return wo.Compound(
 			// wo.Limit(wo.Wwin+1, wo.Hwin+1),
 			wo.Compound(
-				wo.Rectangle(wo.Wwin+1, wo.Hwin+1).Fill(hexpaint(`#00000060`)), // FIXME Must be -1, -1, is not working even with limit.
+				wo.Rectangle(complex(wo.Wwin+1, 0), complex(wo.Hwin+1, 0)).Fill(hexpaint(`#00000060`)), // FIXME Must be -1, -1, is not working even with limit.
 				wo.Canvas(-1, -1, func(vgo *nanovgo.Context, rect geom.Rectangle) {
 					vgo.SetFillColor(hex(`#ffffff`))
 					vgo.SetFontSize(12)

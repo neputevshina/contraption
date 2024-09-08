@@ -60,7 +60,7 @@ func main() {
 			wo.Sequence(
 				contraption.SliceSequence2(wo.Trace, func(i int) contraption.Sorm {
 					p := `#00000000`
-					h := 1.0
+					h := complex128(1.0)
 					switch wo.Trace[i].E.(type) {
 					case contraption.Click:
 						p = `#00ff00`
@@ -289,8 +289,9 @@ func (wo *World) Numbox(v *float64) Sorm {
 		wo.Rectangle(-1, 20).Fill(dark),
 		wo.Compound(
 			wo.Void(-1, -1),
-			wo.Rectangle(-*v, -1).Fill(yellow)),
-		wo.Cond(func(m contraption.Matcher) {
+			wo.Rectangle(complex(-*v, 0), -1).Fill(yellow)).
+			Override(),
+		wo.Void(-1+8i, -1+8i).Cond(func(m contraption.Matcher) {
 			if m.Duration(300 * time.Millisecond).Match(`Click(1):in .* Unclick(1):in Click(1):in`) {
 				*v = 0
 			}
