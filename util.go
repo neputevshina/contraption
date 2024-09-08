@@ -436,3 +436,7 @@ func pttomm(pt float64) float64 {
 func ctrlc(s string) {
 	clipboard.Write(clipboard.FmtText, []byte(s))
 }
+
+func cceil(c complex128) complex128 {
+	return complex(math.Ceil(real(c)), imag(c))
+}

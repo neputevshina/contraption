@@ -3,6 +3,11 @@
 // A good user interface framework must be an engine for a word processing game.
 //
 // TODO:
+//	± Imaginary sizes.
+//		- -1 + 20i — negative stretch, add 20 scaled by local transform pixels to size on layout step
+//		- -1 - 20i  <  -1  <  -1 + 20i
+//		+ Use: extending hitbox of elements without changing layout (together with Override)
+//		± Works only on noaligner, sequences ignore it yet.
 //	- Progress reader for IO operations.
 //		- contraption.ProgressReader{ rd io.Reader; bytes, byteswritten int }
 //		- var _ io.Reader = &ProgressReader{}
@@ -296,13 +301,14 @@ type Equation interface {
 }
 
 type Sorm struct {
-	z, i            int
-	tag             tagkind
-	flags           flagval
-	W, H, r, wl, hl float64
-	x, y            float64
-	m, prem         geom.Geom
-	aligner         int
+	z, i         int
+	tag          tagkind
+	flags        flagval
+	W, H, wl, hl float64
+	addw, addh   float64
+	r, x, y      float64
+	m, prem      geom.Geom
+	aligner      int
 	kidsl, kidsr,
 	modsl, modsr,
 	presl, presr int
@@ -745,11 +751,13 @@ func circlerun(wo *World, s *Sorm) {
 	})
 }
 
-func (wo *World) Rectangle(w, h float64) (s Sorm) {
+func (wo *World) Rectangle(w, h complex128) (s Sorm) {
 	s = wo.newSorm()
 	s.tag = tagRect
-	s.W = w
-	s.H = h
+	s.W = real(w)
+	s.H = real(h)
+	s.addw = imag(w)
+	s.addh = imag(h)
 	return
 }
 func rectrun(wo *World, s *Sorm) {
@@ -758,11 +766,13 @@ func rectrun(wo *World, s *Sorm) {
 	})
 }
 
-func (wo *World) Roundrect(w, h, r float64) (s Sorm) {
+func (wo *World) Roundrect(w, h complex128, r float64) (s Sorm) {
 	s = wo.newSorm()
 	s.tag = tagRoundrect
-	s.W = w
-	s.H = h
+	s.W = real(w)
+	s.H = real(h)
+	s.addw = imag(w)
+	s.addh = imag(h)
 	s.r = r
 	return
 }
@@ -772,11 +782,13 @@ func roundrectrun(wo *World, s *Sorm) {
 	})
 }
 
-func (wo *World) Void(w, h float64) (s Sorm) {
+func (wo *World) Void(w, h complex128) (s Sorm) {
 	s = wo.newSorm()
 	s.tag = tagVoid
-	s.W = w
-	s.H = h
+	s.W = real(w)
+	s.H = real(h)
+	s.addw = imag(w)
+	s.addh = imag(h)
 	return
 }
 func voidrun(wo *World, s *Sorm) {}
@@ -820,22 +832,26 @@ func equationrun(wo *World, s *Sorm) {
 	})
 }
 
-func (wo *World) Canvas(w, h float64, run func(vgo *nanovgo.Context, rect geom.Rectangle)) (s Sorm) {
+func (wo *World) Canvas(w, h complex128, run func(vgo *nanovgo.Context, rect geom.Rectangle)) (s Sorm) {
 	s = wo.newSorm()
 	s.tag = tagCanvas
 	s.canvas = run
-	s.W = w
-	s.H = h
+	s.W = real(w)
+	s.H = real(h)
+	s.addw = imag(w)
+	s.addh = imag(h)
 	return
 }
-func (wo *World) Canvas2(w, h float64, run func(vgo *nanovgo.Context, rect geom.Rectangle)) (s Sorm) {
+func (wo *World) Canvas2(w, h complex128, run func(vgo *nanovgo.Context, rect geom.Rectangle)) (s Sorm) {
 	// FIXME Must be standard behavior of Canvas: scale by transform.
 	s = wo.newSorm()
 	s.tag = tagCanvas
 	s.r = 1
 	s.canvas = run
-	s.W = w
-	s.H = h
+	s.W = real(w)
+	s.H = real(h)
+	s.addw = imag(w)
+	s.addh = imag(h)
 	return
 }
 func canvasrun(wo *World, s *Sorm) {
@@ -1011,7 +1027,7 @@ func betweenrun(wo *World, s, m *Sorm) {
 }
 
 // BetweenVoid adds a Void between every other shape of a compound.
-func (wo *World) BetweenVoid(w, h float64) (s Sorm) {
+func (wo *World) BetweenVoid(w, h complex128) (s Sorm) {
 	return wo.Between(func() Sorm { return wo.Void(w, h) })
 }
 
@@ -1064,7 +1080,7 @@ func vshrinkrun(wo *World, s *Sorm, m *Sorm) {
 }
 
 // Scissor limits the painting of a given compound to specified limits.
-// TODO.
+// TODO Make it method like Override.
 func (wo *World) Scissor(w, h float64) (s Sorm) {
 	s = wo.newSorm()
 	s.tag = tagScissor
@@ -1077,6 +1093,7 @@ func scissorrun(wo *World, s *Sorm, m *Sorm) {}
 // Limit limits the maximum compound size to specified limits.
 // If a given size is negative, it limits the corresponding size of a compound by
 // the rules of negative units for shapes.
+// TODO Imaginary limits.
 func (wo *World) Limit(w, h float64) (s Sorm) {
 	s = wo.newSorm()
 	s.tag = tagLimit
@@ -1147,10 +1164,12 @@ func noaligner(wo *World, c *Sorm) {
 		stretch := false
 		if k.W < 0 {
 			k.W = c.wl * k.W / minp.X
+			k.W += k.addw
 			stretch = true
 		}
 		if k.H < 0 {
 			k.H = c.hl * k.H / minp.Y
+			k.H += k.addh
 			stretch = true
 		}
 		if stretch {
@@ -1274,9 +1293,13 @@ func (wo *World) apply(p *Sorm, c *Sorm) {
 		// Apply scale.
 		k.m = k.m.Mul(c.m)
 		ns := k.m.ApplyPt(geom.Pt(k.W, k.H))
+		ims := k.m.ApplyPt(geom.Pt(k.addw, k.addh))
 		// Don't scale stretch coefficients.
 		k.W = cond(k.W >= 0, ns.X, k.W)
 		k.H = cond(k.H >= 0, ns.Y, k.H)
+		// But scale imaginaries.
+		k.addw = ims.X
+		k.addh = ims.Y
 
 		// Process only kids which sizes are known first.
 		if k.W >= 0 && k.H >= 0 {
@@ -1552,7 +1575,7 @@ func (wo *World) Vscroll(ptr *Scrollptr, scrollpx float64, ylimit float64, seq S
 
 func (wo *World) Root(s ...Sorm) {
 	wo.Compound(
-		wo.Void(wo.Wwin, wo.Hwin),
+		wo.Void(complex(wo.Wwin, 0), complex(wo.Hwin, 0)),
 		func() Sorm {
 			if wo.DragEffect != nil && wo.drag != nil {
 				ps := [2]geom.Point{wo.dragstart, wo.Trace[0].Pt}

@@ -54,7 +54,6 @@ type Events struct {
 	RecordPath string
 	records    []EventPoint
 	future     EventPoint
-	c          chan bang
 }
 
 // scrollPush pushes a new event point to the circular trace buffer and
@@ -315,7 +314,6 @@ func NewEventTracer(w *glfw.Window, replay io.Reader) *Events {
 	var u Events
 	u.heldcur = 0
 	u.regexps = map[string][]rinst{}
-	u.c = make(chan bang)
 	if replay == nil {
 		setupcallbacks(&u, w)
 	} else {
