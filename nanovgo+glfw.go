@@ -25,6 +25,9 @@ func concretenew(config Config, wo *World) {
 	}
 	wo.Window.MakeContextCurrent()
 	gl.Init()
+
+	// FIXME
+
 	if glfw.ExtensionSupported("GLX_EXT_swap_control_tear") || glfw.ExtensionSupported("WGL_EXT_swap_control_tear") {
 		println("tear control is supported")
 		glfw.SwapInterval(-1)
@@ -58,7 +61,9 @@ func (wo *World) windowDevelop() {
 	}
 	wo.BeforeVgo = nil
 	wo.Vgo.EndFrame()
-	wo.Window.SwapBuffers()
+	if wo.Events.tempcur == 0 {
+		wo.Window.SwapBuffers()
+	}
 }
 
 type window = *glfw.Window
@@ -142,6 +147,7 @@ func setupcallbacks(u *Events, window any) {
 		u.emit(Hover{}, geom.Pt(xpos, ypos), time.Now())
 	})
 	w.SetMouseButtonCallback(func(_ *glfw.Window, button glfw.MouseButton, action glfw.Action, _ glfw.ModifierKey) {
+		// println(`CLICK`, time.Now())
 		v := int(button)
 		switch button {
 		case glfw.MouseButtonLeft:

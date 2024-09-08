@@ -57,12 +57,20 @@ func (f *Font) getvgok(vgo *nanovgo.Context) float64 {
 }
 
 func (f *Font) CaptoemFixed(cap fixed.Int26_6) fixed.Int26_6 {
+	const topthresh = 72.0
+
 	// TODO Memoize?
-	em0, em1 := 0.0, 72.0
+	em0, em1 := 0.0, topthresh
 	em := 0.0
 	fem := func() fixed.Int26_6 { return fixed.Int26_6(em * 64) }
 
-	for i := 0; i <= 30; i++ {
+	// Use plain coefficient to get cap if on this em glyphs certainly can't be hinted.
+	if cap > f.EmtocapFixed(topthresh*64) {
+		em = (float64(cap) / 64) / (f.Emtocap(topthresh) / topthresh)
+		return fem()
+	}
+
+	for i := 0; i <= 15; i++ {
 		em = (em0 + em1) / 2
 		r, err := f.Parsed.Metrics(&f.buf, fem(), font.HintingNone)
 		if err != nil {
@@ -74,53 +82,31 @@ func (f *Font) CaptoemFixed(cap fixed.Int26_6) fixed.Int26_6 {
 			em1 = em
 		}
 	}
+
 	return fem()
 }
 
 func (f *Font) Captoem(cap float64) float64 {
-	return float64(f.CaptoemFixed(fixed.Int26_6(cap*64))) / 64
+	return fixedToFloat(f.CaptoemFixed)(cap)
 }
 
-func (f *Font) EmtocapFixed(em fixed.Int26_6) float64 {
+func (f *Font) EmtocapFixed(em fixed.Int26_6) fixed.Int26_6 {
 	r, err := f.Parsed.Metrics(&f.buf, em, font.HintingNone)
 	if err != nil {
 		panic(err)
 	}
-	return float64(r.CapHeight) / 64
+	return r.CapHeight
 }
 
 func (f *Font) Emtocap(em float64) float64 {
-	return f.EmtocapFixed(fixed.Int26_6(em * 64))
+	return fixedToFloat(f.EmtocapFixed)(em)
 }
 
-// func (f *Font) Rune(size float64, r rune) *gel.Texture {
-// 	s := int(size)
-// 	if s <= 6 { // Some fonts are not defined for less than 6 px
-// 		return nil
-// 	}
-// 	if f.Drawable[s].Face == nil {
-// 		f.Drawable[s] = PixelFace{
-// 			Face: truetype.NewFace(f.FreeTypeParsed, &truetype.Options{
-// 				Size:    size,
-// 				DPI:     72,
-// 				Hinting: font.HintingFull,
-// 			}),
-// 			Rasterized: make(map[rune]*struct {
-// 				*gel.Texture
-// 				Seen bool
-// 			}),
-// 		}
-// 	}
-// 	return f.Drawable[s].Rune(r)
-// }
-
-// func (f *Font) Outline(r rune) *gel.Outline {
-// 	o, ok := f.OnGpu[r]
-// 	if !ok {
-// 		f.OnGpu[r] = gel.UploadOutline(f.Segments(r))
-// 	}
-// 	return o
-// }
+func fixedToFloat(f func(fixed.Int26_6) fixed.Int26_6) func(float64) float64 {
+	return func(x float64) float64 {
+		return float64(f(fixed.Int26_6(x*64))) / 64
+	}
+}
 
 func gelSegmentFromSfnt(op int, args [3]fixed.Point26_6) Segment {
 	pair := func(i fixed.Point26_6) (f geom.Point) {
@@ -189,8 +175,6 @@ func (f *Font) PureAdvance(r rune) float64 {
 }
 
 func (f *Font) TrueXBearing(r rune) float64 {
-	// _ = f.Segments(r)
-	// return max(0, -f.minxcache[r])
 	return f.Width(r) - f.PureAdvance(r)
 }
 
