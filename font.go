@@ -2,11 +2,13 @@ package contraption
 
 import (
 	"io"
+	"math"
 	"unicode/utf8"
 
 	"github.com/golang/freetype/truetype"
 	"github.com/neputevshina/geom"
 	"github.com/neputevshina/nanovgo"
+	"golang.org/x/exp/constraints"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/sfnt"
 	"golang.org/x/image/math/fixed"
@@ -355,4 +357,49 @@ func (s *byteSlice) UnreadRune() (err error) {
 
 func Bytes(bs []byte) io.RuneScanner {
 	return &byteSlice{r: bs}
+}
+
+type intSlice[T constraints.Integer] struct {
+	r, n, m T
+}
+
+func (s *intSlice[T]) ReadRune() (r rune, size int, err error) {
+	size = 1
+	n := s.n
+	if s.r < 0 {
+		if s.n > 1 {
+			n--
+		} else {
+			r = '-'
+			return
+		}
+	}
+	m := s.r / exp(10, s.m-n)
+	if s.m-n < 0 && s.r != 0 {
+		return 0, 0, io.EOF
+	}
+	r = '0' + rune(max(m, -m)%10)
+	s.n++
+	return
+}
+
+func exp[T constraints.Integer](a, b T) (c T) {
+	c = 1
+	for b > T(0) {
+		c *= a
+		b--
+	}
+	return
+}
+
+func (s *intSlice[T]) UnreadRune() (err error) {
+	s.n--
+	if s.n < 0 {
+		panic(`underflow`)
+	}
+	return nil
+}
+
+func Int[T constraints.Integer](i T) io.RuneScanner {
+	return &intSlice[T]{r: i, m: T(math.Floor(math.Log10(float64(i))))}
 }
