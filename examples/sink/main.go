@@ -286,11 +286,12 @@ func (wo *World) Numbox(v *float64) Sorm {
 	return wo.Compound(
 		wo.Halign(0.5),
 		wo.Valign(0.5),
-		wo.Rectangle(-1, 20).Fill(dark),
+		wo.Rectangle(-1, 20).
+			Fill(dark).
+			Override(),
 		wo.Compound(
 			wo.Void(-1, -1),
-			wo.Rectangle(complex(-*v, 0), -1).Fill(yellow)).
-			Override(),
+			wo.Rectangle(complex(-*v, 0), -1).Fill(yellow)),
 		wo.Void(-1+8i, -1+8i).Cond(func(m contraption.Matcher) {
 			if m.Duration(300 * time.Millisecond).Match(`Click(1):in .* Unclick(1):in Click(1):in`) {
 				*v = 0
