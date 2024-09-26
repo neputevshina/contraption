@@ -369,10 +369,6 @@ func (s Sorm) String() string {
 		return fmt.Sprintf("#%2.2x%2.2x%2.2x%2.2x", int(c.R*255), int(c.G*255), int(c.B*255), int(c.A*255))
 	}
 
-	pad := func(s string) string {
-		return s
-		// return fmt.Sprintf("%.10s", s)
-	}
 	f := func(f float64) string {
 		return fmt.Sprintf("%g", math.Ceil(f*100)/100)
 	}
@@ -388,7 +384,9 @@ func (s Sorm) String() string {
 	ovrx := cond(s.flags&flagOvrx > 0, "↑X", "  ")
 	ovry := cond(s.flags&flagOvry > 0, "↑Y", "  ")
 	btw := cond(s.flags&flagBetweener > 0, "↔", " ")
-	return fmt.Sprint(s.z, " ", ovrx, ovry, btw, " ", pad(s.tag.String()), " ", vals, key, " <", s.callerfile, ":", s.callerline, ">")
+
+	digits := int(math.Floor(math.Log10(float64(s.z))))
+	return fmt.Sprint(s.z, strings.Repeat(" ", max(0, 5-digits)), ovrx, ovry, btw, " ", s.tag.String(), " ", vals, key, " <", s.callerfile, ":", s.callerline, ">")
 }
 
 func (s Sorm) decimate() Sorm {
@@ -685,6 +683,26 @@ func generaltextrun(kind tagkind) func(wo *World, s *Sorm) {
 	}
 }
 
+// TODO This is the main and preferred method to do vector text.
+// TODO Pool of (Runes)
+func (wo *World) NewVectorTextReader(font []byte) func(size float64, rd io.RuneScanner) Sorm {
+	name := strconv.FormatUint(rand.Uint64(), 36)
+	id, err := NewFont(wo.Vgo, font, name)
+	if err != nil {
+		panic(err)
+	}
+	return func(size float64, rd io.RuneScanner) Sorm {
+		s := wo.newSorm()
+		s.tag = tagVectorText
+		s.H = size
+		s.vecfont = id
+		s.W = s.vecfont.MeasureReader(size, rd)
+		s.r = 0
+		s.key = rd
+		return s
+	}
+}
+
 func (wo *World) NewVectorText(font []byte) func(size float64, str []rune) Sorm {
 	name := strconv.FormatUint(rand.Uint64(), 36)
 	id, err := NewFont(wo.Vgo, font, name)
@@ -696,9 +714,10 @@ func (wo *World) NewVectorText(font []byte) func(size float64, str []rune) Sorm 
 		s.tag = tagVectorText
 		s.H = size
 		s.vecfont = id
-		s.W = s.vecfont.Measure(size, str)
+		rr := Runes(str)
+		s.W = s.vecfont.MeasureReader(size, rr)
 		s.r = 0
-		s.key = str
+		s.key = rr
 		return s
 	}
 }
@@ -721,7 +740,9 @@ func vectortextrun(wo *World, s *Sorm) {
 	}
 	wo.Vgo.SetTransform(nanovgo.TranslateMatrix(float32(s.x), float32(s.y+s.H))) // Top left
 
-	Makealine(wo.Vgo, s.vecfont, s.H, s.key.([]rune))
+	// Makealine(wo.Vgo, s.vecfont, s.H, s.key.([]rune))
+	MakealineReader(wo.Vgo, s.vecfont, s.H, s.key.(io.RuneScanner))
+
 	if s.fill != (nanovgo.Paint{}) {
 		wo.Vgo.Fill()
 	}
@@ -1391,8 +1412,22 @@ func (wo *World) Compound(args ...Sorm) (s Sorm) {
 	return wo.compound(wo.newSorm(), false, nil, args...)
 }
 
+func (wo *World) realroot(args ...Sorm) Sorm {
+	return wo.compound2(wo.newSorm(), false, nil, true, args...)
+}
+
 func (wo *World) compound(s Sorm, isvoid bool, void func() Sorm, args ...Sorm) Sorm {
+	return wo.compound2(s, isvoid, void, false, args...)
+}
+
+func (wo *World) compound2(s Sorm, isvoid bool, void func() Sorm, realroot bool, args ...Sorm) Sorm {
 	var kidc, modc, prec, btwc int
+
+	if realroot {
+		s.wl = wo.Wwin
+		s.hl = wo.Hwin
+	}
+
 	for _, a := range args {
 		if a.tag == tagBetween {
 			isvoid = true
@@ -1584,7 +1619,7 @@ func (wo *World) Root(s ...Sorm) {
 			return Sorm{}
 		}(),
 		wo.displayOscilloscope(),
-		wo.Compound(s...))
+		wo.realroot(s...))
 	wo.rend = len(wo.pool)
 }
 

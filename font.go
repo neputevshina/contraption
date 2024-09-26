@@ -1,6 +1,9 @@
 package contraption
 
 import (
+	"io"
+	"unicode/utf8"
+
 	"github.com/golang/freetype/truetype"
 	"github.com/neputevshina/geom"
 	"github.com/neputevshina/nanovgo"
@@ -17,13 +20,15 @@ type Font struct {
 	Vgoid          int
 	Name           string
 
-	vgok      float64
-	capmap0   int
-	capmap    []int
-	segcache  map[rune][]Segment
-	advcache  map[rune][3]float64
-	minxcache map[rune]float64
-	buf       sfnt.Buffer
+	vgok       float64
+	capmap0    int
+	capmap     []int
+	segcache   map[rune][]Segment
+	advcache   map[rune][3]float64
+	minxcache  map[rune]float64
+	readmem    []rune
+	readmemptr io.RuneReader
+	buf        sfnt.Buffer
 }
 
 func NewFont(vgo *nanovgo.Context, data []byte, name string) (*Font, error) {
@@ -198,23 +203,36 @@ func Replay(vg *nanovgo.Context, segs []Segment) {
 }
 
 func Makealine(vg *nanovgo.Context, font *Font, size float64, runes []rune) float64 {
-	return makealine(vg, font, size, runes, false, true)
+	return makealinerd(vg, font, size, Runes(runes), false, true)
+}
+
+func MakealineReader(vg *nanovgo.Context, font *Font, size float64, rd io.RuneScanner) float64 {
+	return makealinerd(vg, font, size, rd, false, true)
 }
 
 func MakealineStrict(vg *nanovgo.Context, font *Font, size float64, runes []rune) float64 {
-	return makealine(vg, font, size, runes, true, true)
+	return makealinerd(vg, font, size, Runes(runes), true, true)
 }
 
-func makealine(vg *nanovgo.Context, font *Font, cap float64, runes []rune, extendedBox bool, draw bool) float64 {
+func (font *Font) Measure(cap float64, runes []rune) float64 {
+	return makealinerd(nil, font, cap, Runes(runes), false, false)
+}
+
+func makealinerd(vg *nanovgo.Context, font *Font, cap float64, runes io.RuneScanner, extendedBox bool, draw bool) float64 {
 	em := font.Captoem(cap)
-	if len(runes) == 0 {
+
+	r, _, err := runes.ReadRune()
+	c := 0
+	if err == io.EOF {
 		return 0
+	} else if err != nil {
+		panic(err)
 	}
 
-	x := font.TrueXBearing(runes[0])
+	x := font.TrueXBearing(r)
 	if extendedBox {
 		m := 1000.0
-		for _, s := range font.Segments(runes[0]) {
+		for _, s := range font.Segments(r) {
 			m = min(m, s.Args[0].X)
 			m = min(m, s.Args[1].X)
 			m = min(m, s.Args[2].X)
@@ -225,7 +243,7 @@ func makealine(vg *nanovgo.Context, font *Font, cap float64, runes []rune, exten
 		vg.Save()
 		vg.Scale(float32(em), float32(em))
 	}
-	for i, r := range runes {
+	for err == nil {
 		if draw {
 			vg.Save()
 			vg.Translate(float32(x), 0)
@@ -233,20 +251,108 @@ func makealine(vg *nanovgo.Context, font *Font, cap float64, runes []rune, exten
 			vg.PathWinding(nanovgo.Hole)
 			vg.Restore()
 		}
-
-		if i < len(runes)-1 {
-			x += font.Advance(r)
-		} else {
-			x += font.Advance(r)
-		}
+		x += font.Advance(r)
+		r, _, err = runes.ReadRune()
+		c++
+	}
+	if err != nil && err != io.EOF {
+		panic(err)
 	}
 
 	if draw {
 		vg.Restore()
 	}
+	for ; c > 0; c-- {
+		err := runes.UnreadRune()
+		if err != nil {
+			panic(err)
+		}
+	}
+
 	return x * em
 }
 
-func (font *Font) Measure(cap float64, runes []rune) float64 {
-	return makealine(nil, font, cap, runes, false, false)
+func (font *Font) MeasureReader(cap float64, rd io.RuneScanner) float64 {
+	return makealinerd(nil, font, cap, rd, false, false)
+}
+
+type runeSlice struct {
+	r []rune
+	n int
+}
+
+func (s *runeSlice) ReadRune() (r rune, size int, err error) {
+	if s.n == len(s.r) {
+		return 0, 0, io.EOF
+	}
+	r = s.r[s.n]
+	s.n++
+	size = utf8.RuneLen(r)
+	return
+}
+
+func (s *runeSlice) UnreadRune() (err error) {
+	s.n--
+	if s.n < 0 {
+		panic(`underflow`)
+	}
+	return nil
+}
+
+func Runes(rs []rune) io.RuneScanner {
+	return &runeSlice{r: rs}
+}
+
+type stringSlice struct {
+	r string
+	n int
+}
+
+func (s *stringSlice) ReadRune() (r rune, size int, err error) {
+	if s.n == len(s.r) {
+		return 0, 0, io.EOF
+	}
+	r, size = utf8.DecodeRuneInString(s.r)
+	s.n += size
+	return
+}
+
+func (s *stringSlice) UnreadRune() (err error) {
+	_, size := utf8.DecodeLastRuneInString(s.r)
+	s.n -= size
+	if s.n < 0 {
+		panic(`underflow`)
+	}
+	return nil
+}
+
+func String(s string) io.RuneScanner {
+	return &stringSlice{r: s}
+}
+
+type byteSlice struct {
+	r []byte
+	n int
+}
+
+func (s *byteSlice) ReadRune() (r rune, size int, err error) {
+	if s.n == len(s.r) {
+		return 0, 0, io.EOF
+	}
+	r, size = utf8.DecodeRune(s.r)
+	s.n += size
+	return
+}
+
+func (s *byteSlice) UnreadRune() (err error) {
+	_, size := utf8.DecodeLastRune(s.r)
+	s.n -= size
+	if s.n < 0 {
+		panic(`underflow`)
+	}
+	return nil
+}
+
+func Bytes(bs []byte) io.RuneScanner {
+	return &byteSlice{r: bs}
 }

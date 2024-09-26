@@ -77,6 +77,10 @@ func hex(s string) (c nanovgo.Color) {
 	return c
 }
 
+func paint(c nanovgo.Color) nanovgo.Paint { return nanovgo.LinearGradient(0, 0, 1, 1, c, c) }
+
+func hexpaint(s string) nanovgo.Paint { return paint(hex(s)) }
+
 // func println(args ...any) {
 // 	_ = log.Println
 // 	buf := [2 << 10]byte{}
@@ -266,10 +270,6 @@ func geom2nanovgo(g geom.Geom) nanovgo.TransformMatrix {
 		float32(g[2][0]), float32(g[2][1]),
 	}
 }
-
-func paint(c nanovgo.Color) nanovgo.Paint { return nanovgo.LinearGradient(0, 0, 1, 1, c, c) }
-
-func hexpaint(s string) nanovgo.Paint { return paint(hex(s)) }
 
 func probe[T any](t T) T {
 	_, f, l, _ := runtime.Caller(1)
