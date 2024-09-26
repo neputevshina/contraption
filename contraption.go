@@ -1123,12 +1123,17 @@ func (wo *World) Limit(w, h float64) (s Sorm) {
 }
 func limitrun(wo *World, s, m *Sorm) {
 	p := s.m.ApplyPt(geom.Pt(m.W, m.H))
-	m.W, m.H = p.X, p.Y
-	if m.W != 0 {
+	if m.W > 0 {
+		m.W = p.X
 		s.wl = m.W
+	} else if m.W < 0 {
+		s.W = m.W
 	}
-	if m.H != 0 {
+	if m.H > 0 {
+		m.H = p.Y
 		s.hl = m.H
+	} else if m.H < 0 {
+		s.H = m.H
 	}
 }
 
@@ -1273,8 +1278,10 @@ func sequencealigner(wo *World, c *Sorm, h bool) {
 		}
 		endaxis(k)
 
-		k.hl = k.H
-		k.wl = k.W
+		if k.tag != 0 {
+			k.hl = k.H
+			k.wl = k.W
+		}
 		if stretch {
 			wo.apply(c, k)
 		}
@@ -1300,6 +1307,10 @@ func (wo *World) apply(p *Sorm, c *Sorm) {
 		return int(b.tag - a.tag)
 	})
 	for _, m := range c.pres(wo) {
+		// TODO
+		if m.tag == tagLimit {
+			continue
+		}
 		preActions[-100-m.tag](wo, c, &m)
 	}
 
@@ -1310,6 +1321,14 @@ func (wo *World) apply(p *Sorm, c *Sorm) {
 		k := &c.kids(wo)[i]
 		k.wl = c.wl
 		k.hl = c.hl
+
+		// The Limit modifier is remote, meaning parent applies it to the child.
+		// TODO Separate it from other modifiers, possibly create a new category.
+		for _, m := range k.pres(wo) {
+			if m.tag == tagLimit {
+				preActions[-100-m.tag](wo, k, &m)
+			}
+		}
 
 		// Apply scale.
 		k.m = k.m.Mul(c.m)
