@@ -256,6 +256,19 @@ func (wo *World) Examples() Sorm {
 						wo.Label(`pp`),
 					))
 			}),
+		),
+		wo.Compound(
+			wo.Vfollow(),
+			wo.BetweenVoid(0, 64),
+			wo.Example(`Scissor`, func() Sorm {
+				return wo.Compound(
+					wo.Limit(100, 100),
+					wo.Scissor(),
+					wo.Compound(
+						wo.Vfollow(),
+						wo.Rectangle(100, 100).Fill(dark),
+						wo.Rectangle(100, 100).Fill(yellow)))
+			}),
 		))
 }
 

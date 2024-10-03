@@ -3,6 +3,18 @@
 // A good user interface framework must be an engine for a word processing game.
 //
 // TODO:
+//	? LimitOverride
+//	- Grid aligner
+//		- wo.Hgrid(cols int) + wo.Halign() — secondary alignment
+//		- wo.Vgrid(rows int) + wo.Valign()
+//		- Primary alignment won't work — makes no sense
+//		- Negative sizes in primary axis won't work.
+//		- No instructions for items like in CSS grid.
+//		- Negative sizes in secondary axis are distributed.
+//	- BufferSequence
+//		- MemoBufferSequence
+//	- RuneScannerSequence
+//		- Needs recording of the whole given RuneScanner, at least with current Sequence implementation.
 //	± Imaginary sizes.
 //		- -1 + 20i — negative stretch, add 20 scaled by local transform pixels to size on layout step
 //		- -1 - 20i  <  -1  <  -1 + 20i
@@ -18,9 +30,11 @@
 //		- Touch(<50), Touch(>= 10) — threshold for pressure
 //	- File drag event: Drag(*.txt)
 //		- A companion for Drop — matches when the file is dragged above the area.
-//		- Needs changes in GLFW or changing input library.
+//		- Needs changes in GLFW or changing input library. SDL supports this.
 //	- Interactive views for very large 1d and 2d data: waveforms, giant Minecraft maps, y-log STFT frames, etc.
-//		- Why? Try to display STFT of a music file using Matplotlib, then rescale the window. Enjoy the wait.
+//		- Easy insertion of Sorms between the data. See https://www.youtube.com/watch?v=Cz0OvnR_aoY.
+//			- Probably very easy to implement by simply slicing the data.
+//		- Why? Try to display STFT of a music file using Matplotlib, then rescale the window. Enjoy the delay.
 //	- Text area
 //		- https://rxi.github.io/textbox_behaviour.html
 //	- Sequence must be a special shape that pastes Sorms inside a compound, not being compound itself
@@ -65,9 +79,10 @@
 //		- func Hwords(perline func() Sorm) Sorm
 //		- func Vwords(perline func() Sorm) Sorm
 //		- Secondary axis limits influenced by perpendicular Void
-//		- wo.Text(io.RuneReader) []Sorm
+//		- wo.Text(io.RuneScanner) []Sorm
 //			- Returns Knuth-Plass-ready stream of boxes, Glues and Penalties.
 //			? How to insert anything in between symbols?
+//				? RuneScanner splitter?
 //		- wo.Cap(float64) (can't be negative)
 //		- wo.Lsp(float64)
 //		- Knuth-Plass
@@ -203,7 +218,7 @@ const (
 	tagLimit
 )
 
-// NOTE This can actually be a single table, if needed.
+// NOTE This might actually be a single table, if needed.
 var modActions [100]func(wo *World, compound, mod *Sorm)
 var preActions [100]func(wo *World, compound, mod *Sorm)
 var shapeActions [100]func(wo *World, shape *Sorm)
@@ -252,47 +267,6 @@ func init() {
 	alignerActions[2] = hfollowaligner
 }
 
-// Sequence is the thing that can generate elements for a scroll-enabled compound.
-//
-// All the logic to differentiate scroll's elements must be in returned Sorms.
-type Sequence interface {
-	Get(i int) Sorm
-	Length() int
-}
-
-type adhocSequence struct {
-	get    func(i int) Sorm
-	length func() int
-}
-
-func (s *adhocSequence) Get(i int) Sorm {
-	return s.get(i)
-}
-
-func (s *adhocSequence) Length() int {
-	return s.length()
-}
-
-func AdhocSequence(get func(i int) Sorm, length func() int) Sequence {
-	return &adhocSequence{get: get, length: length}
-}
-
-func SliceSequence[T any](sl []T, produce func(T) Sorm) Sequence {
-	return AdhocSequence(func(i int) Sorm { return produce(sl[i]) }, func() int { return len(sl) })
-}
-
-func SliceSequence2[T any](sl []T, produce func(int) Sorm) Sequence {
-	return AdhocSequence(func(i int) Sorm { return produce(i) }, func() int { return len(sl) })
-}
-
-type Scrollptr struct {
-	Index  int
-	Offset float64
-	y      float64
-
-	Dirty bool
-}
-
 type Eqn func(pt geom.Point) (dist float64)
 
 type Equation interface {
@@ -312,6 +286,8 @@ type Sorm struct {
 	kidsl, kidsr,
 	modsl, modsr,
 	presl, presr int
+
+	scissor geom.Rectangle
 
 	fill    nanovgo.Paint
 	stroke  nanovgo.Paint
@@ -386,7 +362,8 @@ func (s Sorm) String() string {
 	btw := cond(s.flags&flagBetweener > 0, "↔", " ")
 
 	digits := int(math.Floor(math.Log10(float64(s.z))))
-	return fmt.Sprint(s.z, strings.Repeat(" ", max(0, 5-digits)), ovrx, ovry, btw, " ", s.tag.String(), " ", vals, key, " <", s.callerfile, ":", s.callerline, ">")
+	scissor := cond(s.scissor.Dx() > 0 && s.scissor.Dy() > 0, fmt.Sprint(s.scissor), "{/}")
+	return fmt.Sprint(s.z, strings.Repeat(" ", max(0, 5-digits)), ovrx, ovry, btw, " ", s.tag.String(), " ", vals, ` `, scissor, key, " ", s.callerfile, ":", s.callerline)
 }
 
 func (s Sorm) decimate() Sorm {
@@ -576,7 +553,7 @@ func (wo *World) alloc(n int) (left, right int) {
 // if capacity has changed, thus making all previously allocated slices
 // be out of pool.
 //
-// But in this case it don't matter. These objects are not going in the pool.
+// But in this case it don't matter. These objects are not going to the pool.
 //
 // wo.alloc() which previously looked like this is fixed now by using indices in
 // Sorms instead of slices.
@@ -587,6 +564,12 @@ func (wo *World) tmpalloc(n int) []Sorm {
 		wo.tmp = wo.tmp[0 : len(wo.tmp)+n]
 	}
 	return wo.tmp[len(wo.tmp)-n:]
+}
+
+func (wo *World) stash(s []Sorm) []Sorm {
+	dst := wo.tmpalloc(len(s))
+	copy(dst, s)
+	return dst
 }
 
 func (wo *World) newSorm() Sorm {
@@ -1100,16 +1083,15 @@ func vshrinkrun(wo *World, s *Sorm, m *Sorm) {
 	s.flags |= flagVshrink
 }
 
-// Scissor limits the painting of a given compound to specified limits.
-// TODO Make it method like Override.
-func (wo *World) Scissor(w, h float64) (s Sorm) {
+// Scissor shrinks the Compound and limits the painting area to its Limit.
+func (wo *World) Scissor() (s Sorm) {
 	s = wo.newSorm()
 	s.tag = tagScissor
-	s.W = w
-	s.H = h
 	return
 }
-func scissorrun(wo *World, s *Sorm, m *Sorm) {}
+func scissorrun(wo *World, s *Sorm, m *Sorm) {
+	s.flags |= flagScissor
+}
 
 // Limit limits the maximum compound size to specified limits.
 // If a given size is negative, it limits the corresponding size of a compound by
@@ -1317,10 +1299,17 @@ func (wo *World) apply(p *Sorm, c *Sorm) {
 	// nl := p.m.ApplyPt(geom.Pt(c.wl, c.hl))
 	// c.wl = cond(c.wl >= 0, nl.X, c.wl)
 	// c.hl = cond(c.wl >= 0, nl.Y, c.hl)
+	// Set scissor to limit if needed.
+	if c.flags&flagScissor > 0 {
+		c.scissor = geom.Rect(0, 0, c.wl, c.hl)
+		c.scissor = c.m.ApplyRect(c.scissor)
+	}
 	for i := range c.kids(wo) {
 		k := &c.kids(wo)[i]
 		k.wl = c.wl
 		k.hl = c.hl
+		// Inherit scissors and apply scale to them.
+		k.scissor = c.scissor
 
 		// The Limit modifier is remote, meaning parent applies it to the child.
 		// TODO Separate it from other modifiers, possibly create a new category.
@@ -1366,6 +1355,11 @@ func (wo *World) apply(p *Sorm, c *Sorm) {
 			c.y = min(c.y, -k.y)
 		}
 	}
+
+	if c.flags&flagScissor > 0 {
+		c.W = min(c.W, c.wl)
+		c.H = min(c.H, c.hl)
+	}
 }
 
 type labelt struct {
@@ -1410,9 +1404,9 @@ func (wo *World) Sequence(q Sequence, plus ...Sorm) (s Sorm) {
 	for i := range tmp[:q.Length()] {
 		s := q.Get(i)
 		// Skip wo.Void(0,0)
-		if s.tag == tagVoid && s.W == 0 && s.H == 0 {
-			continue
-		}
+		// if s.tag == tagVoid && s.W == 0 && s.H == 0 {
+		// 	continue
+		// }
 		// Skip Sorm{}
 		if zero(s) {
 			continue
@@ -1662,7 +1656,7 @@ func (wo *World) Next() bool {
 	wo.Wwin, wo.Hwin = float64(w), float64(h)
 	wo.Events.Viewport = geom.Pt(float64(w), float64(h))
 
-	cl := hex(`#fefefe`)
+	cl := hex(`#ffffff`)
 	gl.ClearColor(cl.R, cl.G, cl.B, cl.A)
 	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT)
 	gl.Enable(gl.BLEND)
@@ -1744,23 +1738,26 @@ func (wo *World) Develop() {
 		println()
 	}
 
+	// Do the layout.
 	wo.apply(nil, last(pool))
 
 	// Inherit moves and paints.
+	// TODO Maybe wo.apply should do it? Kind of makes more sense.
 	for i := len(pool) - 1; i >= 0; i-- {
-		s := &pool[i]
-		for j := range s.kids(wo) {
-			kid := &s.kids(wo)[j]
-			kid.x += s.x
-			kid.y += s.y
-			if kid.fill == (nanovgo.Paint{}) {
-				kid.fill = s.fill
+		c := &pool[i]
+		for j := range c.kids(wo) {
+			k := &c.kids(wo)[j]
+			k.x += c.x
+			k.y += c.y
+			k.scissor = k.scissor.Add(geom.Pt(c.x, c.y))
+			if k.fill == (nanovgo.Paint{}) {
+				k.fill = c.fill
 			}
-			if kid.stroke == (nanovgo.Paint{}) {
-				kid.stroke = s.stroke
+			if k.stroke == (nanovgo.Paint{}) {
+				k.stroke = c.stroke
 			}
-			if kid.flags&flagSetStrokewidth == 0 {
-				kid.strokew = s.strokew
+			if k.flags&flagSetStrokewidth == 0 {
+				k.strokew = c.strokew
 			}
 		}
 	}
@@ -1816,10 +1813,23 @@ func (wo *World) Develop() {
 	// Draw.
 	for _, s := range pool {
 		if s.tag > 0 {
+			// Set scissor up.
+			s = s.decimate()
+			vgo.ResetScissor()
+			if s.scissor.Dx() > 0 && s.scissor.Dy() > 0 {
+				x, y, w, h := rect2nvgxywh(s.scissor)
+				x = float32(math.Floor(float64(x)))
+				y = float32(math.Floor(float64(y)))
+				w = float32(math.Ceil(float64(w)))
+				h = float32(math.Ceil(float64(h)))
+				x -= 0.5
+				y -= 0.5
+				vgo.Scissor(x, y, w, h)
+			}
+
 			// Positioning bodges
 			switch s.tag {
 			default:
-				s = s.decimate()
 				// This fix is needed by every vector drawing library i know.
 				// And i only know Nanovg and Love2d.
 				s.x -= 0.5
@@ -1836,6 +1846,7 @@ func (wo *World) Develop() {
 			case tagCanvas:
 			}
 			shapeActions[s.tag](wo, &s)
+			vgo.ResetTransform()
 		}
 	}
 
