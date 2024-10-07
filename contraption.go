@@ -366,8 +366,14 @@ func (s Sorm) auxkids(wo *World) []Sorm {
 	return wo.auxpool[s.kidsl:s.kidsr]
 }
 
-func (s Sorm) kids(wo *World) []Sorm {
+func (s Sorm) kids2(wo *World) []Sorm {
 	return wo.pool[s.kidsl:s.kidsr]
+}
+
+func (s Sorm) kidsiter(wo *World, f func(s *Sorm)) {
+	for i := range wo.pool[s.kidsl:s.kidsr] {
+		f(&wo.pool[i])
+	}
 }
 
 func (s Sorm) mods(wo *World) []Sorm {
@@ -642,15 +648,14 @@ func (wo *World) Halign(amt float64) (s Sorm) {
 }
 func halignrun(wo *World, c, m *Sorm) {
 	x := 0.0
-	for i := range c.kids(wo) {
-		x = max(x, c.kids(wo)[i].W)
-	}
+	c.kidsiter(wo, func(k *Sorm) {
+		x = max(x, k.W)
+	})
 	c.W = max(c.W, x)
-	for i := range c.kids(wo) {
-		k := &c.kids(wo)[i]
+	c.kidsiter(wo, func(k *Sorm) {
 		k.x += (x - k.W) * m.W
 		// c.h = max(c.h, k.h)
-	}
+	})
 }
 
 func (wo *World) Valign(amt float64) (s Sorm) {
@@ -661,15 +666,14 @@ func (wo *World) Valign(amt float64) (s Sorm) {
 }
 func valignrun(wo *World, c, m *Sorm) {
 	y := 0.0
-	for i := range c.kids(wo) {
-		y = max(y, c.kids(wo)[i].H)
-	}
+	c.kidsiter(wo, func(k *Sorm) {
+		y = max(y, k.H)
+	})
 	c.H = max(c.H, y)
-	for i := range c.kids(wo) {
-		k := &c.kids(wo)[i]
+	c.kidsiter(wo, func(k *Sorm) {
 		k.y += (y - k.H) * m.W
 		// c.w = max(c.w, k.w)
-	}
+	})
 }
 
 func (wo *World) Fill(p nanovgo.Paint) (s Sorm) {
@@ -679,11 +683,11 @@ func (wo *World) Fill(p nanovgo.Paint) (s Sorm) {
 	return
 }
 func fillrun(wo *World, s, m *Sorm) {
-	for i := range s.kids(wo) {
-		if s.kids(wo)[i].tag >= 0 {
-			s.kids(wo)[i].fill = m.fill
+	s.kidsiter(wo, func(k *Sorm) {
+		if k.tag >= 0 {
+			k.fill = m.fill
 		}
-	}
+	})
 }
 
 func (wo *World) Stroke(p nanovgo.Paint) (s Sorm) {
@@ -693,11 +697,11 @@ func (wo *World) Stroke(p nanovgo.Paint) (s Sorm) {
 	return
 }
 func strokerun(wo *World, s, m *Sorm) {
-	for i := range s.kids(wo) {
-		if s.kids(wo)[i].tag > 0 {
-			s.kids(wo)[i].stroke = m.stroke
+	s.kidsiter(wo, func(k *Sorm) {
+		if k.tag > 0 {
+			k.stroke = m.stroke
 		}
-	}
+	})
 }
 
 func (wo *World) Strokewidth(w float64) (s Sorm) {
@@ -708,11 +712,11 @@ func (wo *World) Strokewidth(w float64) (s Sorm) {
 }
 func strokewidthrun(wo *World, s, m *Sorm) {
 	s.flags |= flagSetStrokewidth
-	for i := range s.kids(wo) {
-		if s.kids(wo)[i].tag > 0 {
-			s.kids(wo)[i].strokew = m.strokew
+	s.kidsiter(wo, func(k *Sorm) {
+		if k.tag > 0 {
+			k.strokew = m.strokew
 		}
-	}
+	})
 }
 
 func (wo *World) Identity(key any) (s Sorm) {
@@ -889,8 +893,7 @@ func pretransformrun(wo *World, c, m *Sorm) {
 // If a Compound has no aligner set (“stack” layout)
 func noaligner(wo *World, c *Sorm) {
 	minp := Point{}
-	for i := range c.kids(wo) {
-		k := &c.kids(wo)[i]
+	c.kidsiter(wo, func(k *Sorm) {
 		c.W = max(c.W, k.W)
 		c.H = max(c.H, k.H)
 		if k.W < 0 {
@@ -899,15 +902,14 @@ func noaligner(wo *World, c *Sorm) {
 		if k.H < 0 {
 			minp.Y = min(minp.Y, k.H)
 		}
-	}
+	})
 	if c.flags&flagHshrink > 0 {
 		c.wl = c.W
 	}
 	if c.flags&flagVshrink > 0 {
 		c.hl = c.H
 	}
-	for i := range c.kids(wo) {
-		k := &c.kids(wo)[i]
+	c.kidsiter(wo, func(k *Sorm) {
 		stretch := false
 		if k.W < 0 {
 			k.W = c.wl * k.W / minp.X
@@ -924,12 +926,11 @@ func noaligner(wo *World, c *Sorm) {
 			k.wl = k.W
 			wo.apply(c, k)
 		}
-	}
-	for i := range c.kids(wo) {
-		k := &c.kids(wo)[i]
+	})
+	c.kidsiter(wo, func(k *Sorm) {
 		c.W = max(c.W, k.W)
 		c.H = max(c.H, k.H)
-	}
+	})
 }
 
 func vfollowaligner(wo *World, c *Sorm) {
@@ -955,9 +956,7 @@ func sequencealigner(wo *World, c *Sorm, h bool) {
 	endaxis := beginaxis
 
 	// Get total known sizes for each axis.
-	for i := range c.kids(wo) {
-		k := &c.kids(wo)[i]
-
+	c.kidsiter(wo, func(k *Sorm) {
 		beginaxis(k)
 		if k.W > 0 {
 			known.X = max(known.X, k.W)
@@ -970,7 +969,7 @@ func sequencealigner(wo *World, c *Sorm, h bool) {
 			props.Y -= k.H
 		}
 		endaxis(k)
-	}
+	})
 
 	// If there was no limit set for the secondary axis, let it be
 	// the biggest known size measured by it.
@@ -984,9 +983,7 @@ func sequencealigner(wo *World, c *Sorm, h bool) {
 	// lay out the sequence then.
 	y := 0.0
 	beginaxis(c)
-	for i := range c.kids(wo) {
-		k := &c.kids(wo)[i]
-
+	c.kidsiter(wo, func(k *Sorm) {
 		beginaxis(k)
 		stretch := false
 		if k.H < 0 {
@@ -1012,7 +1009,7 @@ func sequencealigner(wo *World, c *Sorm, h bool) {
 		y += k.H
 		c.W = max(c.W, k.W)
 		endaxis(k)
-	}
+	})
 	c.H = y
 	endaxis(c)
 }
@@ -1043,8 +1040,7 @@ func (wo *World) apply(p *Sorm, c *Sorm) {
 		c.scissor = geom.Rect(0, 0, c.wl, c.hl)
 		c.scissor = c.m.ApplyRect(c.scissor)
 	}
-	for i := range c.kids(wo) {
-		k := &c.kids(wo)[i]
+	c.kidsiter(wo, func(k *Sorm) {
 		k.wl = c.wl
 		k.hl = c.hl
 		// Inherit scissors and apply scale to them.
@@ -1073,7 +1069,7 @@ func (wo *World) apply(p *Sorm, c *Sorm) {
 		if k.W >= 0 && k.H >= 0 {
 			wo.apply(c, k)
 		}
-	}
+	})
 
 	alignerActions[c.aligner](wo, c)
 
@@ -1082,8 +1078,7 @@ func (wo *World) apply(p *Sorm, c *Sorm) {
 		modActions[-m.tag](wo, c, &m)
 	}
 
-	for i := range c.kids(wo) {
-		k := &c.kids(wo)[i]
+	c.kidsiter(wo, func(k *Sorm) {
 		// Apply size override to c if it has one.
 		if k.flags&flagOvrx > 0 {
 			c.W = k.W
@@ -1093,7 +1088,7 @@ func (wo *World) apply(p *Sorm, c *Sorm) {
 			c.H = k.H
 			c.y = min(c.y, -k.y)
 		}
-	}
+	})
 
 	if c.flags&flagScissor > 0 {
 		c.W = min(c.W, c.wl)
@@ -1193,10 +1188,10 @@ func (wo *World) compound2(s Sorm, isvoid bool, void func() Sorm, realroot bool,
 	i := 0
 	for _, a := range args {
 		if a.tag >= 0 {
-			s.kids(wo)[i] = a
+			s.kids2(wo)[i] = a
 			i++
 			if isvoid && voidc > 0 && !(a.flags&flagBetweener > 0) {
-				s.kids(wo)[i] = wo.tmp[tmpn]
+				s.kids2(wo)[i] = wo.tmp[tmpn]
 				voidc--
 				tmpn++
 				i++
@@ -1390,13 +1385,13 @@ func (wo *World) Next() bool {
 	return true
 }
 
-func reachCheck(wo *World, pool []Sorm) {
-	for i := range pool {
-		k := &pool[i]
-		k.flags |= flagMark
-		reachCheck(wo, k.kids(wo))
-	}
-}
+// func reachCheck(wo *World, pool []Sorm) {
+// 	for i := range pool {
+// 		k := &pool[i]
+// 		k.flags |= flagMark
+// 		reachCheck(wo, k.kids(wo))
+// 	}
+// }
 
 // Develop applies the layout and renders the next frame.
 // See package description for preferred use of Contraption.
@@ -1410,7 +1405,7 @@ func (wo *World) Develop() {
 
 	pool := wo.pool[0:wo.rend]
 
-	reachCheck(wo, pool)
+	// reachCheck(wo, pool)
 	for i := range pool {
 		pool[i].i = i
 		if !(pool[i].flags&flagMark > 0) {
@@ -1433,8 +1428,7 @@ func (wo *World) Develop() {
 	// TODO Maybe wo.apply should do it? Kind of makes more sense.
 	for i := len(pool) - 1; i >= 0; i-- {
 		c := &pool[i]
-		for j := range c.kids(wo) {
-			k := &c.kids(wo)[j]
+		c.kidsiter(wo, func(k *Sorm) {
 			k.x += c.x
 			k.y += c.y
 			k.scissor = k.scissor.Add(geom.Pt(c.x, c.y))
@@ -1447,7 +1441,7 @@ func (wo *World) Develop() {
 			if k.flags&flagSetStrokewidth == 0 {
 				k.strokew = c.strokew
 			}
-		}
+		})
 	}
 
 	// Print tree for debug. Do it before sorting.
@@ -1676,9 +1670,9 @@ func sormp(wo *World, s Sorm, tab int) {
 	for _, s := range s.mods(wo) {
 		sormp(wo, s, tab+1)
 	}
-	for _, s := range s.kids(wo) {
-		sormp(wo, s, tab+1)
-	}
+	s.kidsiter(wo, func(k *Sorm) {
+		sormp(wo, *k, tab+1)
+	})
 }
 
 // Activator — это любой объект, на котором может быть сконцентрирован
