@@ -160,6 +160,8 @@ import (
 	"golang.org/x/exp/slices"
 )
 
+const sequenceChunkSize = 10
+
 type flagval uint
 
 const (
@@ -1130,26 +1132,27 @@ func (wo *World) Cat(a, b []Sorm) (s Sorm) {
 	tmp := wo.tmpalloc(len(a) + len(b))
 	copy(tmp[:len(a)], a)
 	copy(tmp[len(a):], b)
-	return wo.compound(wo.newSorm(), false, nil, tmp...)
+	return wo.compound(wo.newSorm(), tmp...)
 }
 
 // Compound is a shape container.
 // It combines multiple Sorms into a single shape.
 // Every other container is just a rebranded Compound.
 func (wo *World) Compound(args ...Sorm) (s Sorm) {
-	return wo.compound(wo.newSorm(), false, nil, args...)
+	return wo.compound(wo.newSorm(), args...)
 }
 
 func (wo *World) realroot(args ...Sorm) Sorm {
-	return wo.compound2(wo.newSorm(), false, nil, true, args...)
+	return wo.compound2(wo.newSorm(), true, args...)
 }
 
-func (wo *World) compound(s Sorm, isvoid bool, void func() Sorm, args ...Sorm) Sorm {
-	return wo.compound2(s, isvoid, void, false, args...)
+func (wo *World) compound(s Sorm, args ...Sorm) Sorm {
+	return wo.compound2(s, false, args...)
 }
 
-func (wo *World) compound2(s Sorm, isvoid bool, void func() Sorm, realroot bool, args ...Sorm) Sorm {
+func (wo *World) compound2(s Sorm, realroot bool, args ...Sorm) Sorm {
 	var kidc, modc, prec, btwc int
+	var void func() Sorm
 
 	if realroot {
 		s.wl = wo.Wwin
@@ -1158,7 +1161,6 @@ func (wo *World) compound2(s Sorm, isvoid bool, void func() Sorm, realroot bool,
 
 	for _, a := range args {
 		if a.tag == tagBetween {
-			isvoid = true
 			void = a.key.(func() Sorm)
 		}
 		switch {
@@ -1173,10 +1175,11 @@ func (wo *World) compound2(s Sorm, isvoid bool, void func() Sorm, realroot bool,
 			prec++
 		}
 	}
-	// Void allocation pass
+	// TODO Allocate only what needed by index and limit.
+	// Between-shape allocation pass
 	tmpn := len(wo.tmp)
 	voidc := max(kidc-btwc-1, 0)
-	if isvoid {
+	if void != nil {
 		kidc = kidc + voidc
 		// Place new voids into temporary storage so their allocations won't
 		// break breadth-first order of the pool.
@@ -1195,7 +1198,7 @@ func (wo *World) compound2(s Sorm, isvoid bool, void func() Sorm, realroot bool,
 		if a.tag >= 0 {
 			s.kids(wo)[i] = a
 			i++
-			if isvoid && voidc > 0 && !(a.flags&flagBetweener > 0) {
+			if void != nil && voidc > 0 && !(a.flags&flagBetweener > 0) {
 				s.kids(wo)[i] = wo.tmp[tmpn]
 				voidc--
 				tmpn++
