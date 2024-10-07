@@ -293,25 +293,116 @@ func canvasrun(wo *World, s *Sorm) {
 }
 
 // Sequence transforms external data to stream of Sorms.
-func (wo *World) Sequence(q Sequence, plus ...Sorm) (s Sorm) {
-	// TODO Visibility check
-	// FIXME Double allocation, implement sequencesequencealigner.
+func (wo *World) Sequence(q Sequence) (s Sorm) {
+	s = wo.newSorm()
+	s.tag = tagSequence
+	s.key = q
+	return s
+}
+func sequencerun(wo *World, s *Sorm) {
 
-	tmp := wo.tmpalloc(q.Length() + len(plus))
+}
+
+func (s *Sorm) kidsend(wo *World) (i [2]int) {
+	// defer func() { println(`kidsend:`, i) }()
+	if len(s.kids(wo)) == 0 {
+		return
+	}
+	i = [2]int{len(s.kids(wo)) - 1, 0}
+	e := s.kids(wo)[i[0]]
+	if e.tag == tagSequence {
+		i[1] = e.key.(Sequence).Length() - 1
+	}
+	return
+}
+
+func (s *Sorm) kidsnext(wo *World, i [2]int) [2]int {
+	// i0 := i
+	e := s.kids(wo)[i[0]]
+	if e.tag == tagSequence && i[1] < e.key.(Sequence).Length()-1 {
+		i[1]++
+	} else {
+		i[0]++
+		i[1] = 0
+	}
+	// println(`kidsnext:`, i0, `->`, i)
+	return i
+}
+
+func (s *Sorm) kidsprev(wo *World, i [2]int) [2]int {
+	e := s.kids(wo)[i[0]]
+	i[1]--
+	if e.tag == tagSequence && i[1] < 0 {
+		i[1] = e.key.(Sequence).Length() - 1
+	} else {
+		i[0]--
+		i[1] = 0
+	}
+	return i
+}
+
+func (s *Sorm) kidsget(wo *World, i [2]int) *Sorm {
+	// println(`kidsget:`, i)
+	e := &s.kids(wo)[i[0]]
+	// We should have shapes in a pool.
+	// It is an exceptional event to __not__ have them in a pool,
+	// rather than have.
+	// They should be allocated at first scan, so this is
+	// just a cache for them.
+	// The first read FULLY determines the starting index of a Sequence.
+	// The first loop FULLY determines the ending index.
+	q, ok := e.key.(Sequence)
+	if !ok {
+		return e
+	}
+	// Need to cache.
+	// We are always starting from scratch, so a necessary condition for a correct Sequence is that
+	// no new elements can be produced before the develop.
+	// So no reallocation is possible.
+	// This may need implementing some locking mechanism for remote Sequences.
+	if i[1] > len(e.auxkids(wo))-1 {
+		n := q.Get(i[1])
+		l, r := wo.allocaux(1)
+		if len(e.auxkids(wo)) == 0 {
+			e.kidsl = l
+		}
+		e.kidsr = r
+		e.auxkids(wo)[r-l-1] = n
+	}
+	s2 := &e.auxkids(wo)[i[1]]
+	return s2
+}
+
+func (s *Sorm) kidsIter(wo *World, f func(k *Sorm)) {
+	// If s.index == nil, then we are taking stretch into account.
+	// Else we are scrolling and can't stretch.
+	i := [2]int{0, 0}
 	j := 0
-	for i := range tmp[:q.Length()] {
-		s := q.Get(i)
-		// Skip wo.Void(0,0)
-		// if s.tag == tagVoid && s.W == 0 && s.H == 0 {
-		// 	continue
-		// }
-		// Skip Sorm{}
-		if zero(s) {
+	for {
+		// println(i, s.kidsend(wo))
+		if i == s.kidsend(wo) {
+			break
+		}
+		// Skip elements before the index.
+		if s.index != nil && j < s.index.I {
 			continue
 		}
-		tmp[j] = s
-		j++
+		k := s.kidsget(wo, i)
+		f(k)
+		// TODO Bottom limit of a scrollable pane.
+		// if s.index != nil &&  {
+		// }
+		i = s.kidsnext(wo, i)
 	}
-	copy(tmp[j:], plus)
-	return wo.compound(wo.newSorm(), false, nil, tmp...)
+}
+
+func (s *Sorm) kidsIterReverse(wo *World, f func(k *Sorm)) {
+	i := s.kidsend(wo)
+	for {
+		if i == [2]int{} {
+			break
+		}
+		f(s.kidsget(wo, i))
+		i = s.kidsprev(wo, i)
+	}
 }
