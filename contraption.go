@@ -1029,9 +1029,9 @@ func (wo *World) apply(p *Sorm, c *Sorm) {
 	})
 	for _, m := range c.pres(wo) {
 		// TODO
-		if m.tag == tagLimit {
-			continue
-		}
+		// if m.tag == tagLimit {
+		// 	continue
+		// }
 		preActions[-100-m.tag](wo, c, &m)
 	}
 
@@ -1052,11 +1052,11 @@ func (wo *World) apply(p *Sorm, c *Sorm) {
 
 		// The Limit modifier is remote, meaning parent applies it to the child.
 		// TODO Separate it from other modifiers, possibly create a new category.
-		for _, m := range k.pres(wo) {
-			if m.tag == tagLimit {
-				preActions[-100-m.tag](wo, k, &m)
-			}
-		}
+		// for _, m := range k.pres(wo) {
+		// 	if m.tag == tagLimit {
+		// 		preActions[-100-m.tag](wo, k, &m)
+		// 	}
+		// }
 
 		// Apply scale.
 		k.m = k.m.Mul(c.m)
@@ -1417,33 +1417,6 @@ func (wo *World) Develop() {
 			pool[i].tag = tagVoid
 			pool[i].W = 0
 			pool[i].H = 0
-		}
-	}
-
-	// Inherit stretch.
-	for i := 0; i < len(pool)-1; i++ {
-		s := &pool[i]
-		// Stop the chain of inheritance if we have a Limit.
-		var stopw, stoph bool
-		for j := range s.pres(wo) {
-			k := &s.pres(wo)[j]
-			if k.tag == tagLimit {
-				if k.W != 0 {
-					stopw = true
-				}
-				if k.H != 0 {
-					stoph = true
-				}
-			}
-		}
-		for j := range s.kids(wo) {
-			k := &s.kids(wo)[j]
-			if k.W < 0 && !stopw {
-				// s.W += k.W
-			}
-			if k.H < 0 && !stoph {
-				// s.H += k.H
-			}
 		}
 	}
 
