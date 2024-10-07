@@ -57,8 +57,11 @@ func main() {
 
 		wo.Root(
 			wo.Pretransform(geom.Scale2d(scale, scale)),
-			wo.Sequence(
-				contraption.SliceSequence2(wo.Trace, func(i int) contraption.Sorm {
+			wo.Compound(
+				wo.Limit(0, 10),
+				wo.Hfollow(),
+				wo.Valign(0),
+				wo.Sequence(contraption.SliceSequence2(wo.Trace, func(i int) contraption.Sorm {
 					p := `#00000000`
 					h := complex128(1.0)
 					switch wo.Trace[i].E.(type) {
@@ -78,16 +81,12 @@ func main() {
 						p = `#ff00ff`
 					}
 					return wo.Rectangle(-1, -h).Fill(hexpaint(p))
-				}),
-				wo.Limit(0, 10),
-				wo.Hfollow(),
-				wo.Valign(0)),
+				}))),
 			wo.Compound(
 				wo.Halign(0.5),
 				wo.Valign(0.5),
 				wo.Void(-1, -1),
-				wo.Examples(),
-			),
+				wo.Examples()),
 			wo.Compound(
 				wo.Halign(0),
 				wo.Valign(1),

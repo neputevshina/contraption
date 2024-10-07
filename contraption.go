@@ -5,6 +5,7 @@
 // Cleanup TODO:
 //	- Remove all X and rename all X2 to X.
 //	- Remove Canvas2: accept Geom as an argument to painting func
+//	- Move (Sorm).callerfile and (Sorm).callerline to a separate table
 //
 // TODO:
 //	? LimitOverride
@@ -193,6 +194,7 @@ const (
 	tagVectorText
 	tagTopDownText
 	tagBottomUpText
+	tagSequence
 )
 const (
 	_ tagkind = -iota
@@ -243,6 +245,7 @@ func init() {
 	shapeActions[tagText] = generaltextrun(tagText)
 	shapeActions[tagTopDownText] = generaltextrun(tagTopDownText)
 	shapeActions[tagBottomUpText] = generaltextrun(tagBottomUpText)
+	shapeActions[tagSequence] = sequencerun
 
 	modActions[-tagHalign] = halignrun
 	modActions[-tagValign] = valignrun
@@ -319,23 +322,29 @@ type World struct {
 }
 
 type Sorm struct {
-	z, i         int
-	tag          tagkind
-	flags        flagval
+	z, i  int
+	tag   tagkind
+	flags flagval
+
 	W, H, wl, hl float64
 	addw, addh   float64
 	r, x, y      float64
 	m, prem      geom.Geom
-	aligner      int
+
+	aligner int
+
 	kidsl, kidsr,
 	modsl, modsr,
-	presl, presr int
+	presl, presr,
+	auxl, auxr int
+
+	index *Index // Only if tag == 0
 
 	scissor geom.Rectangle
 
 	fill    nanovgo.Paint
 	stroke  nanovgo.Paint
-	strokew float32 // TODO
+	strokew float32
 
 	fontid  int
 	vecfont *Font
@@ -346,8 +355,10 @@ type Sorm struct {
 	// 	- Compound stores an Identity, which also works
 	//	  out as Source's dropable object
 	// 	- Between stores func() Sorm
-	key any // TODO eqn and key must be one field, key can only be in compounds
+	key any
 
+	// TODO Create a special pool for callbacks and extract those fields to it
+	// That pool can use linear search with last used index. Probably.
 	condfill       func(rect geom.Rectangle) nanovgo.Paint
 	condstroke     func(rect geom.Rectangle) nanovgo.Paint
 	condfillstroke func(rect geom.Rectangle) (nanovgo.Paint, nanovgo.Paint)
@@ -356,13 +367,19 @@ type Sorm struct {
 
 	sinkid int
 
-	eyl float64
-
 	callerline int
 	callerfile string
 }
 
+type Index struct {
+	I int
+	O float64
+}
+
 func (s Sorm) auxkids(wo *World) []Sorm {
+	if s.tag != tagSequence {
+		panic(`contraption, internal: protocol violation`)
+	}
 	return wo.auxpool[s.kidsl:s.kidsr]
 }
 
@@ -572,22 +589,6 @@ func (s Sorm) paint(wo *World, f func()) {
 	}
 }
 
-// // Get implements Sequence.
-// func (s *Sorm) Get(i int) Sorm {
-// 	if s.tag != tagCompound {
-// 		return *s
-// 	}
-// 	return s.kids(s.wo)[i]
-// }
-
-// // Length implements Sequence.
-// func (s *Sorm) Length() int {
-// 	if s.tag != tagCompound {
-// 		return 1
-// 	}
-// 	return len(s.kids(s.wo))
-// }
-
 // BaseWorld returns itself.
 // This method allows to access base World class from user worlds.
 func (wo *World) BaseWorld() *World {
@@ -642,15 +643,14 @@ func (wo *World) Halign(amt float64) (s Sorm) {
 }
 func halignrun(wo *World, c, m *Sorm) {
 	x := 0.0
-	for i := range c.kids(wo) {
-		x = max(x, c.kids(wo)[i].W)
-	}
+	c.kidsIter(wo, func(k *Sorm) {
+		x = max(x, k.W)
+	})
 	c.W = max(c.W, x)
-	for i := range c.kids(wo) {
-		k := &c.kids(wo)[i]
+	c.kidsIter(wo, func(k *Sorm) {
 		k.x += (x - k.W) * m.W
 		// c.h = max(c.h, k.h)
-	}
+	})
 }
 
 func (wo *World) Valign(amt float64) (s Sorm) {
@@ -661,15 +661,14 @@ func (wo *World) Valign(amt float64) (s Sorm) {
 }
 func valignrun(wo *World, c, m *Sorm) {
 	y := 0.0
-	for i := range c.kids(wo) {
-		y = max(y, c.kids(wo)[i].H)
-	}
+	c.kidsIter(wo, func(k *Sorm) {
+		y = max(y, k.H)
+	})
 	c.H = max(c.H, y)
-	for i := range c.kids(wo) {
-		k := &c.kids(wo)[i]
+	c.kidsIter(wo, func(k *Sorm) {
 		k.y += (y - k.H) * m.W
 		// c.w = max(c.w, k.w)
-	}
+	})
 }
 
 func (wo *World) Fill(p nanovgo.Paint) (s Sorm) {
@@ -679,11 +678,11 @@ func (wo *World) Fill(p nanovgo.Paint) (s Sorm) {
 	return
 }
 func fillrun(wo *World, s, m *Sorm) {
-	for i := range s.kids(wo) {
-		if s.kids(wo)[i].tag >= 0 {
-			s.kids(wo)[i].fill = m.fill
+	s.kidsIter(wo, func(k *Sorm) {
+		if k.tag >= 0 {
+			k.fill = m.fill
 		}
-	}
+	})
 }
 
 func (wo *World) Stroke(p nanovgo.Paint) (s Sorm) {
@@ -693,11 +692,11 @@ func (wo *World) Stroke(p nanovgo.Paint) (s Sorm) {
 	return
 }
 func strokerun(wo *World, s, m *Sorm) {
-	for i := range s.kids(wo) {
-		if s.kids(wo)[i].tag > 0 {
-			s.kids(wo)[i].stroke = m.stroke
+	s.kidsIter(wo, func(k *Sorm) {
+		if k.tag >= 0 {
+			k.stroke = m.stroke
 		}
-	}
+	})
 }
 
 func (wo *World) Strokewidth(w float64) (s Sorm) {
@@ -708,11 +707,11 @@ func (wo *World) Strokewidth(w float64) (s Sorm) {
 }
 func strokewidthrun(wo *World, s, m *Sorm) {
 	s.flags |= flagSetStrokewidth
-	for i := range s.kids(wo) {
-		if s.kids(wo)[i].tag > 0 {
-			s.kids(wo)[i].strokew = m.strokew
+	s.kidsIter(wo, func(k *Sorm) {
+		if k.tag >= 0 {
+			k.strokew = m.strokew
 		}
-	}
+	})
 }
 
 func (wo *World) Identity(key any) (s Sorm) {
@@ -889,8 +888,7 @@ func pretransformrun(wo *World, c, m *Sorm) {
 // If a Compound has no aligner set (“stack” layout)
 func noaligner(wo *World, c *Sorm) {
 	minp := Point{}
-	for i := range c.kids(wo) {
-		k := &c.kids(wo)[i]
+	c.kidsIter(wo, func(k *Sorm) {
 		c.W = max(c.W, k.W)
 		c.H = max(c.H, k.H)
 		if k.W < 0 {
@@ -899,15 +897,14 @@ func noaligner(wo *World, c *Sorm) {
 		if k.H < 0 {
 			minp.Y = min(minp.Y, k.H)
 		}
-	}
+	})
 	if c.flags&flagHshrink > 0 {
 		c.wl = c.W
 	}
 	if c.flags&flagVshrink > 0 {
 		c.hl = c.H
 	}
-	for i := range c.kids(wo) {
-		k := &c.kids(wo)[i]
+	c.kidsIter(wo, func(k *Sorm) {
 		stretch := false
 		if k.W < 0 {
 			k.W = c.wl * k.W / minp.X
@@ -924,7 +921,7 @@ func noaligner(wo *World, c *Sorm) {
 			k.wl = k.W
 			wo.apply(c, k)
 		}
-	}
+	})
 	for i := range c.kids(wo) {
 		k := &c.kids(wo)[i]
 		c.W = max(c.W, k.W)
@@ -955,9 +952,7 @@ func sequencealigner(wo *World, c *Sorm, h bool) {
 	endaxis := beginaxis
 
 	// Get total known sizes for each axis.
-	for i := range c.kids(wo) {
-		k := &c.kids(wo)[i]
-
+	c.kidsIter(wo, func(k *Sorm) {
 		beginaxis(k)
 		if k.W > 0 {
 			known.X = max(known.X, k.W)
@@ -970,7 +965,7 @@ func sequencealigner(wo *World, c *Sorm, h bool) {
 			props.Y -= k.H
 		}
 		endaxis(k)
-	}
+	})
 
 	// If there was no limit set for the secondary axis, let it be
 	// the biggest known size measured by it.
@@ -984,9 +979,7 @@ func sequencealigner(wo *World, c *Sorm, h bool) {
 	// lay out the sequence then.
 	y := 0.0
 	beginaxis(c)
-	for i := range c.kids(wo) {
-		k := &c.kids(wo)[i]
-
+	c.kidsIter(wo, func(k *Sorm) {
 		beginaxis(k)
 		stretch := false
 		if k.H < 0 {
@@ -1012,7 +1005,7 @@ func sequencealigner(wo *World, c *Sorm, h bool) {
 		y += k.H
 		c.W = max(c.W, k.W)
 		endaxis(k)
-	}
+	})
 	c.H = y
 	endaxis(c)
 }
@@ -1029,34 +1022,31 @@ func (wo *World) apply(p *Sorm, c *Sorm) {
 	})
 	for _, m := range c.pres(wo) {
 		// TODO
-		if m.tag == tagLimit {
-			continue
-		}
+		// if m.tag == tagLimit {
+		// 	continue
+		// }
 		preActions[-100-m.tag](wo, c, &m)
 	}
 
-	// nl := p.m.ApplyPt(geom.Pt(c.wl, c.hl))
-	// c.wl = cond(c.wl >= 0, nl.X, c.wl)
-	// c.hl = cond(c.wl >= 0, nl.Y, c.hl)
 	// Set scissor to limit if needed.
 	if c.flags&flagScissor > 0 {
 		c.scissor = geom.Rect(0, 0, c.wl, c.hl)
 		c.scissor = c.m.ApplyRect(c.scissor)
 	}
-	for i := range c.kids(wo) {
-		k := &c.kids(wo)[i]
+	c.kidsIter(wo, func(k *Sorm) {
 		k.wl = c.wl
 		k.hl = c.hl
 		// Inherit scissors and apply scale to them.
 		k.scissor = c.scissor
 
+		// Commented out because does not work with transform.
 		// The Limit modifier is remote, meaning parent applies it to the child.
 		// TODO Separate it from other modifiers, possibly create a new category.
-		for _, m := range k.pres(wo) {
-			if m.tag == tagLimit {
-				preActions[-100-m.tag](wo, k, &m)
-			}
-		}
+		// for _, m := range k.pres(wo) {
+		// 	if m.tag == tagLimit {
+		// 		preActions[-100-m.tag](wo, k, &m)
+		// 	}
+		// }
 
 		// Apply scale.
 		k.m = k.m.Mul(c.m)
@@ -1073,7 +1063,7 @@ func (wo *World) apply(p *Sorm, c *Sorm) {
 		if k.W >= 0 && k.H >= 0 {
 			wo.apply(c, k)
 		}
-	}
+	})
 
 	alignerActions[c.aligner](wo, c)
 
@@ -1082,8 +1072,7 @@ func (wo *World) apply(p *Sorm, c *Sorm) {
 		modActions[-m.tag](wo, c, &m)
 	}
 
-	for i := range c.kids(wo) {
-		k := &c.kids(wo)[i]
+	c.kidsIter(wo, func(k *Sorm) {
 		// Apply size override to c if it has one.
 		if k.flags&flagOvrx > 0 {
 			c.W = k.W
@@ -1093,7 +1082,7 @@ func (wo *World) apply(p *Sorm, c *Sorm) {
 			c.H = k.H
 			c.y = min(c.y, -k.y)
 		}
-	}
+	})
 
 	if c.flags&flagScissor > 0 {
 		c.W = min(c.W, c.wl)
@@ -1420,33 +1409,6 @@ func (wo *World) Develop() {
 		}
 	}
 
-	// Inherit stretch.
-	for i := 0; i < len(pool)-1; i++ {
-		s := &pool[i]
-		// Stop the chain of inheritance if we have a Limit.
-		var stopw, stoph bool
-		for j := range s.pres(wo) {
-			k := &s.pres(wo)[j]
-			if k.tag == tagLimit {
-				if k.W != 0 {
-					stopw = true
-				}
-				if k.H != 0 {
-					stoph = true
-				}
-			}
-		}
-		for j := range s.kids(wo) {
-			k := &s.kids(wo)[j]
-			if k.W < 0 && !stopw {
-				// s.W += k.W
-			}
-			if k.H < 0 && !stoph {
-				// s.H += k.H
-			}
-		}
-	}
-
 	if wo.Events.Match(`Press(F4)`) {
 		println("@ Tree before applying stretches")
 		sormp(wo, *last(pool), 0)
@@ -1460,8 +1422,10 @@ func (wo *World) Develop() {
 	// TODO Maybe wo.apply should do it? Kind of makes more sense.
 	for i := len(pool) - 1; i >= 0; i-- {
 		c := &pool[i]
-		for j := range c.kids(wo) {
-			k := &c.kids(wo)[j]
+		if c.tag != tagCompound {
+			continue
+		}
+		c.kidsIter(wo, func(k *Sorm) {
 			k.x += c.x
 			k.y += c.y
 			k.scissor = k.scissor.Add(geom.Pt(c.x, c.y))
@@ -1474,7 +1438,7 @@ func (wo *World) Develop() {
 			if k.flags&flagSetStrokewidth == 0 {
 				k.strokew = c.strokew
 			}
-		}
+		})
 	}
 
 	// Print tree for debug. Do it before sorting.
@@ -1491,33 +1455,38 @@ func (wo *World) Develop() {
 
 	// Apply conditional paints.
 	for i := len(pool) - 1; i >= 0; i-- {
-		s := &pool[i]
-		r := geom.Rect(s.x, s.y, s.x+s.W, s.y+s.H)
-		if s.condfillstroke != nil {
-			s.fill, s.stroke = s.condfillstroke(r)
+		c := &pool[i]
+		if c.tag != tagCompound {
+			continue
 		}
-		if s.condfill != nil {
-			s.fill = s.condfill(r)
-		}
-		if s.condstroke != nil {
-			s.stroke = s.condstroke(r)
-		}
-		m := wo.Events.In(r).WithZ(i + 1)
-		if s.flags&flagSource > 0 {
-			if m.Match(`Click(1):in`) {
-				wo.drag = s.key
-				wo.dragstart = wo.Last.FirstTouch
+		c.kidsIter(wo, func(s *Sorm) {
+			r := geom.Rect(s.x, s.y, s.x+s.W, s.y+s.H)
+			if s.condfillstroke != nil {
+				s.fill, s.stroke = s.condfillstroke(r)
 			}
-		}
-		if s.cond != nil {
-			s.cond(m)
-		}
-		if s.sinkid > 0 {
-			if m.Match(`Unclick(1):in`) && wo.drag != nil {
-				wo.sinks[s.sinkid](wo.drag)
-				wo.drag = nil
+			if s.condfill != nil {
+				s.fill = s.condfill(r)
 			}
-		}
+			if s.condstroke != nil {
+				s.stroke = s.condstroke(r)
+			}
+			m := wo.Events.In(r).WithZ(i + 1)
+			if s.flags&flagSource > 0 {
+				if m.Match(`Click(1):in`) {
+					wo.drag = s.key
+					wo.dragstart = wo.Last.FirstTouch
+				}
+			}
+			if s.cond != nil {
+				s.cond(m)
+			}
+			if s.sinkid > 0 {
+				if m.Match(`Unclick(1):in`) && wo.drag != nil {
+					wo.sinks[s.sinkid](wo.drag)
+					wo.drag = nil
+				}
+			}
+		})
 	}
 
 	// Final drag match — resets drag if it was dropped in nowhere.
@@ -1526,43 +1495,49 @@ func (wo *World) Develop() {
 	}
 
 	// Draw.
-	for _, s := range pool {
-		if s.tag > 0 {
-			// Set scissor up.
-			s = s.decimate()
-			vgo.ResetScissor()
-			if s.scissor.Dx() > 0 && s.scissor.Dy() > 0 {
-				x, y, w, h := rect2nvgxywh(s.scissor)
-				x = float32(math.Floor(float64(x)))
-				y = float32(math.Floor(float64(y)))
-				w = float32(math.Ceil(float64(w)))
-				h = float32(math.Ceil(float64(h)))
-				x -= 0.5
-				y -= 0.5
-				vgo.Scissor(x, y, w, h)
-			}
-
-			// Positioning bodges
-			switch s.tag {
-			default:
-				// This fix is needed by every vector drawing library i know.
-				// And i only know Nanovg and Love2d.
-				s.x -= 0.5
-				s.y -= 0.5
-			case tagTopDownText:
-				fallthrough
-			case tagBottomUpText:
-				fallthrough
-			case tagText:
-				// s.x -= 1
-				// s.y -= 1
-
-			case tagVectorText:
-			case tagCanvas:
-			}
-			shapeActions[s.tag](wo, &s)
-			vgo.ResetTransform()
+	for _, c := range pool {
+		if c.tag != tagCompound {
+			continue
 		}
+		c.kidsIter(wo, func(k *Sorm) {
+			s := *k
+			if s.tag > 0 {
+				// Set scissor up.
+				s = s.decimate()
+				vgo.ResetScissor()
+				if s.scissor.Dx() > 0 && s.scissor.Dy() > 0 {
+					x, y, w, h := rect2nvgxywh(s.scissor)
+					x = float32(math.Floor(float64(x)))
+					y = float32(math.Floor(float64(y)))
+					w = float32(math.Ceil(float64(w)))
+					h = float32(math.Ceil(float64(h)))
+					x -= 0.5
+					y -= 0.5
+					vgo.Scissor(x, y, w, h)
+				}
+
+				// Positioning bodges
+				switch s.tag {
+				default:
+					// This fix is needed by every vector drawing library i know.
+					// And i only know Nanovg and Love2d.
+					s.x -= 0.5
+					s.y -= 0.5
+				case tagTopDownText:
+					fallthrough
+				case tagBottomUpText:
+					fallthrough
+				case tagText:
+					// s.x -= 1
+					// s.y -= 1
+
+				case tagVectorText:
+				case tagCanvas:
+				}
+				shapeActions[s.tag](wo, &s)
+				vgo.ResetTransform()
+			}
+		})
 	}
 
 	wo.Vgo.Reset()
