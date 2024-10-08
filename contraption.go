@@ -370,9 +370,10 @@ func (s Sorm) kids2(wo *World) []Sorm {
 	return wo.pool[s.kidsl:s.kidsr]
 }
 
-func (s Sorm) kidsiter(wo *World, f func(s *Sorm)) {
+func (s Sorm) kidsiter(wo *World, f func(*Sorm)) {
 	for i := range wo.pool[s.kidsl:s.kidsr] {
-		f(&wo.pool[i])
+		k := &wo.pool[s.kidsl+i]
+		f(k)
 	}
 }
 
@@ -652,10 +653,12 @@ func halignrun(wo *World, c, m *Sorm) {
 		x = max(x, k.W)
 	})
 	c.W = max(c.W, x)
+	println(`before `, last(c.kids2(wo)).x)
 	c.kidsiter(wo, func(k *Sorm) {
 		k.x += (x - k.W) * m.W
 		// c.h = max(c.h, k.h)
 	})
+	println(last(c.kids2(wo)).x)
 }
 
 func (wo *World) Valign(amt float64) (s Sorm) {
@@ -669,11 +672,13 @@ func valignrun(wo *World, c, m *Sorm) {
 	c.kidsiter(wo, func(k *Sorm) {
 		y = max(y, k.H)
 	})
+	println(`before `, last(c.kids2(wo)).x)
 	c.H = max(c.H, y)
 	c.kidsiter(wo, func(k *Sorm) {
 		k.y += (y - k.H) * m.W
 		// c.w = max(c.w, k.w)
 	})
+	println(last(c.kids2(wo)).x)
 }
 
 func (wo *World) Fill(p nanovgo.Paint) (s Sorm) {
@@ -924,6 +929,7 @@ func noaligner(wo *World, c *Sorm) {
 		if stretch {
 			k.hl = k.H
 			k.wl = k.W
+			println(`apply called`, k.z)
 			wo.apply(c, k)
 		}
 	})
@@ -1408,11 +1414,11 @@ func (wo *World) Develop() {
 	// reachCheck(wo, pool)
 	for i := range pool {
 		pool[i].i = i
-		if !(pool[i].flags&flagMark > 0) {
-			pool[i].tag = tagVoid
-			pool[i].W = 0
-			pool[i].H = 0
-		}
+		// if !(pool[i].flags&flagMark > 0) {
+		// 	pool[i].tag = tagVoid
+		// 	pool[i].W = 0
+		// 	pool[i].H = 0
+		// }
 	}
 
 	if wo.Events.Match(`Press(F4)`) {
