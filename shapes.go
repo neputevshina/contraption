@@ -315,3 +315,14 @@ func (wo *World) Sequence(q Sequence, plus ...Sorm) (s Sorm) {
 	copy(tmp[j:], plus)
 	return wo.compound(wo.newSorm(), false, nil, tmp...)
 }
+
+// Sequence transforms external data to stream of Sorms.
+func (wo *World) Sequence2(q Sequence) (s Sorm) {
+	s = wo.newSorm()
+	s.tag = tagSequence
+	s.key = q
+	return s
+}
+func sequencerun(wo *World, s *Sorm) {
+
+}

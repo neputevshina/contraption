@@ -173,6 +173,8 @@ const (
 	flagHshrink
 	flagVshrink
 	flagSetStrokewidth
+	flagSequenceMark
+	flagBreakIteration
 )
 
 //go:generate stringer -type=tagkind -trimprefix=tag
@@ -193,6 +195,7 @@ const (
 	tagVectorText
 	tagTopDownText
 	tagBottomUpText
+	tagSequence
 )
 const (
 	_ tagkind = -iota
@@ -243,6 +246,7 @@ func init() {
 	shapeActions[tagText] = generaltextrun(tagText)
 	shapeActions[tagTopDownText] = generaltextrun(tagTopDownText)
 	shapeActions[tagBottomUpText] = generaltextrun(tagBottomUpText)
+	shapeActions[tagSequence] = sequencerun
 
 	modActions[-tagHalign] = halignrun
 	modActions[-tagValign] = valignrun
@@ -319,7 +323,7 @@ type World struct {
 }
 
 type Sorm struct {
-	z, i         int
+	z, z2, i     int
 	tag          tagkind
 	flags        flagval
 	W, H, wl, hl float64
@@ -330,6 +334,8 @@ type Sorm struct {
 	kidsl, kidsr,
 	modsl, modsr,
 	presl, presr int
+
+	index *Index
 
 	scissor geom.Rectangle
 
@@ -362,6 +368,11 @@ type Sorm struct {
 	callerfile string
 }
 
+type Index struct {
+	I int
+	O float64
+}
+
 func (s Sorm) auxkids(wo *World) []Sorm {
 	return wo.auxpool[s.kidsl:s.kidsr]
 }
@@ -371,9 +382,41 @@ func (s Sorm) kids2(wo *World) []Sorm {
 }
 
 func (s Sorm) kidsiter(wo *World, f func(*Sorm)) {
-	for i := range wo.pool[s.kidsl:s.kidsr] {
-		k := &wo.pool[s.kidsl+i]
-		f(k)
+	// TODO Idea: take a limit in kidsiter, and if it is scissored, stop iteration when over it.
+	// It should work since scissored compounds can't stretch kids.
+	kids := wo.pool[s.kidsl:s.kidsr]
+out:
+	for i := range kids {
+		k := &kids[i]
+
+		q, ok := k.key.(Sequence)
+		if ok {
+			tocache := false
+			if k.kidsl == 0 {
+				k.kidsl, k.kidsr = wo.allocaux(q.Length())
+				tocache = true
+			}
+			aux := wo.auxpool[k.kidsl:k.kidsr]
+			for i := 0; i < q.Length(); i++ {
+				if tocache {
+					t := q.Get(i)
+					t.z2 = i
+					t.z = k.z
+					t.flags |= flagSequenceMark
+					aux[i] = t
+				}
+				k := &aux[i]
+				f(k)                                // (1)
+				if k.flags&flagBreakIteration > 0 { //
+					break out
+				}
+			}
+		} else {
+			f(k)                                // (1)
+			if k.flags&flagBreakIteration > 0 { //
+				break out
+			}
+		}
 	}
 }
 
@@ -457,10 +500,25 @@ func (s Sorm) String() string {
 	ovrx := cond(s.flags&flagOvrx > 0, "↑X", "  ")
 	ovry := cond(s.flags&flagOvry > 0, "↑Y", "  ")
 	btw := cond(s.flags&flagBetweener > 0, "↔", " ")
+	seq := " "
+	z := ""
+	if s.flags&flagSequenceMark > 0 {
+		seq = "S"
+		z = sprint([2]int{s.z, s.z2})
+	} else {
+		z = sprint(s.z)
+	}
 
-	digits := int(math.Floor(math.Log10(float64(s.z))))
+	d := func(i int) int {
+		return int(math.Floor(math.Log10(float64(i))))
+	}
+	digits := d(s.z) + max(d(s.z2), 0)
+	if seq == "S" {
+		digits += 2 // "[" and "]"
+	}
 	scissor := cond(s.scissor.Dx() > 0 && s.scissor.Dy() > 0, fmt.Sprint(s.scissor), "{/}")
-	return fmt.Sprint(s.z, strings.Repeat(" ", max(0, 5-digits)), ovrx, ovry, btw, " ", s.tag.String(), " ", vals, ` `, scissor, key, " ", s.callerfile, ":", s.callerline)
+
+	return fmt.Sprint(z, strings.Repeat(" ", max(0, 10-digits)), seq, ovrx, ovry, btw, " ", s.tag.String(), " ", vals, ` `, scissor, key, " ", s.callerfile, ":", s.callerline)
 }
 
 func (s Sorm) decimate() Sorm {
@@ -653,12 +711,10 @@ func halignrun(wo *World, c, m *Sorm) {
 		x = max(x, k.W)
 	})
 	c.W = max(c.W, x)
-	println(`before `, last(c.kids2(wo)).x)
 	c.kidsiter(wo, func(k *Sorm) {
 		k.x += (x - k.W) * m.W
 		// c.h = max(c.h, k.h)
 	})
-	println(last(c.kids2(wo)).x)
 }
 
 func (wo *World) Valign(amt float64) (s Sorm) {
@@ -672,13 +728,11 @@ func valignrun(wo *World, c, m *Sorm) {
 	c.kidsiter(wo, func(k *Sorm) {
 		y = max(y, k.H)
 	})
-	println(`before `, last(c.kids2(wo)).x)
 	c.H = max(c.H, y)
 	c.kidsiter(wo, func(k *Sorm) {
 		k.y += (y - k.H) * m.W
 		// c.w = max(c.w, k.w)
 	})
-	println(last(c.kids2(wo)).x)
 }
 
 func (wo *World) Fill(p nanovgo.Paint) (s Sorm) {
@@ -929,7 +983,6 @@ func noaligner(wo *World, c *Sorm) {
 		if stretch {
 			k.hl = k.H
 			k.wl = k.W
-			println(`apply called`, k.z)
 			wo.apply(c, k)
 		}
 	})
@@ -1499,43 +1552,55 @@ func (wo *World) Develop() {
 	}
 
 	// Draw.
-	for _, s := range pool {
-		if s.tag > 0 {
-			// Set scissor up.
-			s = s.decimate()
-			vgo.ResetScissor()
-			if s.scissor.Dx() > 0 && s.scissor.Dy() > 0 {
-				x, y, w, h := rect2nvgxywh(s.scissor)
-				x = float32(math.Floor(float64(x)))
-				y = float32(math.Floor(float64(y)))
-				w = float32(math.Ceil(float64(w)))
-				h = float32(math.Ceil(float64(h)))
-				x -= 0.5
-				y -= 0.5
-				vgo.Scissor(x, y, w, h)
-			}
-
-			// Positioning bodges
-			switch s.tag {
-			default:
-				// This fix is needed by every vector drawing library i know.
-				// And i only know Nanovg and Love2d.
-				s.x -= 0.5
-				s.y -= 0.5
-			case tagTopDownText:
-				fallthrough
-			case tagBottomUpText:
-				fallthrough
-			case tagText:
-				// s.x -= 1
-				// s.y -= 1
-
-			case tagVectorText:
-			case tagCanvas:
-			}
-			shapeActions[s.tag](wo, &s)
-			vgo.ResetTransform()
+	draw := func(s Sorm) {
+		s = s.decimate()
+		// Set scissor up.
+		vgo.ResetScissor()
+		if s.scissor.Dx() > 0 && s.scissor.Dy() > 0 {
+			x, y, w, h := rect2nvgxywh(s.scissor)
+			x = float32(math.Floor(float64(x)))
+			y = float32(math.Floor(float64(y)))
+			w = float32(math.Ceil(float64(w)))
+			h = float32(math.Ceil(float64(h)))
+			x -= 0.5
+			y -= 0.5
+			vgo.Scissor(x, y, w, h)
 		}
+
+		// Positioning bodges
+		switch s.tag {
+		default:
+			// This fix is needed by every vector drawing library i know.
+			// And i only know Nanovg and Love2d.
+			s.x -= 0.5
+			s.y -= 0.5
+		case tagTopDownText:
+			fallthrough
+		case tagBottomUpText:
+			fallthrough
+		case tagText:
+			// s.x -= 1
+			// s.y -= 1
+
+		case tagVectorText:
+		case tagCanvas:
+		}
+		shapeActions[s.tag](wo, &s)
+		vgo.ResetTransform()
+	}
+	for _, s := range pool {
+		if s.tag <= 0 {
+			continue
+		}
+		if s.tag == tagSequence {
+			// At this moment every shape inside a sequence is cached,
+			// just read it directly.
+			pool := wo.auxpool[s.kidsl:s.kidsr]
+			for _, s := range pool {
+				draw(s)
+			}
+		}
+		draw(s)
 	}
 
 	wo.Vgo.Reset()
@@ -1577,14 +1642,17 @@ func (wo *World) Develop() {
 	// Hence it is applicable to the old pool, the only reason it is
 	// saved is to preserve keys.
 	wo.old, wo.pool = wo.pool, wo.old
-	for i := range wo.pool {
-		wo.pool[i] = Sorm{}
+	wo.auxold, wo.auxpool = wo.auxpool, wo.auxold
+	zeroandclear := func(pool *[]Sorm) {
+		for i := range *pool {
+			(*pool)[i] = Sorm{}
+		}
+		(*pool) = (*pool)[:0]
 	}
-	wo.pool = wo.pool[:0]
-	for i := range wo.tmp {
-		wo.tmp[i] = Sorm{}
-	}
-	wo.tmp = wo.tmp[:0]
+
+	zeroandclear(&wo.pool)
+	zeroandclear(&wo.auxpool)
+	zeroandclear(&wo.tmp)
 	wo.nextn = 0
 
 	wo.sinks = wo.sinks[:1]
