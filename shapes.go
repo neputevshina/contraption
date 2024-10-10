@@ -313,7 +313,7 @@ func (wo *World) Sequence(q Sequence, plus ...Sorm) (s Sorm) {
 		j++
 	}
 	copy(tmp[j:], plus)
-	return wo.compound(wo.newSorm(), false, nil, tmp...)
+	return wo.compound(wo.newSorm(), tmp...)
 }
 
 // Sequence transforms external data to stream of Sorms.
