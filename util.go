@@ -448,3 +448,16 @@ func rect2nvgxywh(r geom.Rectangle) (x, y, w, h float32) {
 	h = float32(r.Dy())
 	return
 }
+
+func sameslice[T any](a, b []T) bool {
+	switch {
+	case cap(a) == 0:
+		return false
+	case cap(b) == 0:
+		return false
+	case &a[:1][0] == &b[:1][0]:
+		return true
+	default:
+		return false
+	}
+}

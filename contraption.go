@@ -294,7 +294,9 @@ type World struct {
 
 	nextn   int
 	pool    []Sorm
+	auxn    int
 	auxpool []Sorm
+	prefix  int
 
 	old    []Sorm
 	auxold []Sorm
@@ -323,6 +325,7 @@ type World struct {
 	DragEffect func(interval [2]geom.Point, drag any) Sorm
 
 	showOutlines bool
+	f1           bool
 
 	alloc func(n int) (left, right int)
 }
@@ -404,28 +407,32 @@ out:
 				reall := len(wo.auxpool)
 				// Treat the aux pool as a main pool and a sequence as a root compound.
 				{
-					if unsafe.SliceData(wo.pool) == unsafe.SliceData(wo.auxpool) {
+					if sameslice(wo.pool, wo.auxpool) {
 						panic(`contraption: nested Sequences are not allowwed`)
 					}
 					pool := wo.pool
 					wo.pool = wo.auxpool
+					wo.nextn, wo.auxn = wo.auxn, wo.nextn
+					wo.prefix = k.z
 					// wo.alloc = wo.allocaux
 
 					for i := 0; i < q.Length(); i++ {
 						t := q.Get(i)
-						t.z2 = i
-						t.z = k.z
-						t.flags |= flagSequenceMark
+						// t.z2 = i
+						// t.z = k.z
 						args[i] = t
 					}
 
 					wo.auxpool = wo.pool
 					wo.pool = pool
+					wo.nextn, wo.auxn = wo.auxn, wo.nextn
+					wo.prefix = 0
+
 					// wo.alloc = wo.allocmain
 				}
-				l, r := wo.allocaux(q.Length())
-				// Copy the elements materialized from sequence to the main pool,
+				// Copy the elements materialized from sequence to the aux pool,
 				// treat them like arguments of (*World).Compound
+				l, r := wo.allocaux(q.Length())
 				copy(wo.auxpool[l:r], args)
 				k.kidsl = reall
 				k.kidsr = r
@@ -442,6 +449,10 @@ out:
 					break out
 				}
 			}
+			// for i := range wo.auxpool {
+			// 	println(i, wo.auxpool[i])
+			// }
+			// os.Exit(1)
 		} else {
 			f(k)                                // (1)
 			if k.flags&flagBreakIteration > 0 { // (2)
@@ -690,17 +701,24 @@ func (wo *World) BaseWorld() *World {
 	return wo
 }
 
-func (wo *World) newSorm() Sorm {
+func (wo *World) newSorm() (s Sorm) {
 	wo.nextn++
-	_, file, line, _ := runtime.Caller(2)
-	return Sorm{
-		// wo:         wo,
-		z:          wo.nextn,
-		m:          geom.Identity2d(),
-		prem:       geom.Identity2d(),
-		callerfile: file,
-		callerline: line,
+
+	s = Sorm{
+		z:    wo.nextn,
+		m:    geom.Identity2d(),
+		prem: geom.Identity2d(),
 	}
+	if wo.f1 {
+		_, s.callerfile, s.callerline, _ = runtime.Caller(2)
+	}
+	virtual := wo.prefix > 0
+	if virtual {
+		s.z = wo.prefix
+		s.z2 = wo.nextn
+		s.flags = flagSequenceMark
+	}
+	return
 }
 
 func (wo *World) Prevkey(key any) Sorm {
@@ -1536,9 +1554,21 @@ func (wo *World) Develop() {
 	}
 
 	// Print tree for debug. Do it before sorting.
-	if wo.Events.Match(`Press(F1)`) {
+	if wo.f1 {
 		println("@ Tree after layout")
 		sormp(wo, *last(pool), 0)
+		println()
+		wo.f1 = false
+	}
+	if wo.Events.Match(`Press(F1)`) {
+		wo.f1 = true
+	}
+
+	if wo.Events.Match(`Press(F6)`) {
+		println("@ Auxpool")
+		for i := range wo.auxpool {
+			println(i, wo.auxpool[i])
+		}
 		println()
 	}
 
@@ -1690,6 +1720,7 @@ func (wo *World) Develop() {
 	zeroandclear(&wo.auxpool)
 	zeroandclear(&wo.tmp)
 	wo.nextn = 0
+	wo.auxn = 0
 
 	wo.sinks = wo.sinks[:1]
 
