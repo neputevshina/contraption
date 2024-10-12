@@ -286,6 +286,7 @@ type Equation interface {
 
 type World struct {
 	*Events
+
 	Window       Window
 	Oscilloscope Oscilloscope
 
@@ -322,6 +323,8 @@ type World struct {
 	DragEffect func(interval [2]geom.Point, drag any) Sorm
 
 	showOutlines bool
+
+	alloc func(n int) (left, right int)
 }
 
 type Sorm struct {
@@ -386,6 +389,9 @@ func (s Sorm) kids2(wo *World) []Sorm {
 func (s Sorm) kidsiter(wo *World, f func(*Sorm)) {
 	// TODO Idea: take a limit in kidsiter, and if it is scissored, stop iteration when over it.
 	// It should work since scissored compounds can't stretch kids.
+	if s.tag == tagSequence {
+		return
+	}
 	kids := wo.pool[s.kidsl:s.kidsr]
 out:
 	for i := range kids {
@@ -393,29 +399,52 @@ out:
 
 		q, ok := k.key.(Sequence)
 		if ok {
-			tocache := false
 			if k.kidsl == 0 {
-				k.kidsl, k.kidsr = wo.allocaux(q.Length())
-				tocache = true
-			}
-			aux := wo.auxpool[k.kidsl:k.kidsr]
-			for i := 0; i < q.Length(); i++ {
-				if tocache {
-					t := q.Get(i)
-					t.z2 = i
-					t.z = k.z
-					t.flags |= flagSequenceMark
-					aux[i] = t
+				args := wo.tmpalloc(q.Length())
+				reall := len(wo.auxpool)
+				// Treat the aux pool as a main pool and a sequence as a root compound.
+				{
+					if unsafe.SliceData(wo.pool) == unsafe.SliceData(wo.auxpool) {
+						panic(`contraption: nested Sequences are not allowwed`)
+					}
+					pool := wo.pool
+					wo.pool = wo.auxpool
+					// wo.alloc = wo.allocaux
+
+					for i := 0; i < q.Length(); i++ {
+						t := q.Get(i)
+						t.z2 = i
+						t.z = k.z
+						t.flags |= flagSequenceMark
+						args[i] = t
+					}
+
+					wo.auxpool = wo.pool
+					wo.pool = pool
+					// wo.alloc = wo.allocmain
 				}
+				l, r := wo.allocaux(q.Length())
+				// Copy the elements materialized from sequence to the main pool,
+				// treat them like arguments of (*World).Compound
+				copy(wo.auxpool[l:r], args)
+				k.kidsl = reall
+				k.kidsr = r
+			}
+			aux := wo.auxpool[k.kidsr-q.Length() : k.kidsr]
+			for i := range aux {
 				k := &aux[i]
-				f(k)                                // (1)
-				if k.flags&flagBreakIteration > 0 { //
+				pool := wo.pool
+				wo.pool = wo.auxpool
+				f(k) // (1)
+				wo.auxpool = wo.pool
+				wo.pool = pool
+				if k.flags&flagBreakIteration > 0 { // (2)
 					break out
 				}
 			}
 		} else {
 			f(k)                                // (1)
-			if k.flags&flagBreakIteration > 0 { //
+			if k.flags&flagBreakIteration > 0 { // (2)
 				break out
 			}
 		}
@@ -430,8 +459,8 @@ func (s Sorm) pres(wo *World) []Sorm {
 	return wo.pool[s.presl:s.presr]
 }
 
-// alloc allocates new memory in pool and returns index range for an object.
-func (wo *World) alloc(n int) (left, right int) {
+// allocmain allocates new memory in pool and returns index range for an object.
+func (wo *World) allocmain(n int) (left, right int) {
 	return alloc(&wo.pool, n)
 }
 
@@ -1598,8 +1627,12 @@ func (wo *World) Develop() {
 		if s.tag == tagSequence {
 			// At this moment every shape inside a sequence is cached,
 			// just read it directly.
+			// TODO This approach can be extended ad infimum to support nested sequences.
 			pool := wo.auxpool[s.kidsl:s.kidsr]
 			for _, s := range pool {
+				if s.tag <= 0 {
+					continue
+				}
 				draw(s)
 			}
 		}
@@ -1793,7 +1826,7 @@ func (wi *Window) Rect() image.Rectangle {
 	return wi.rect()
 }
 
-func New(config Config) (wo World) {
+func New(config Config) (wo *World) {
 	if config.WindowRect.Dx() == 0 {
 		config.WindowRect.Max.X = config.WindowRect.Min.X + 1024
 	}
@@ -1802,10 +1835,13 @@ func New(config Config) (wo World) {
 	}
 
 	runtime.LockOSThread()
-	concretenew(config, &wo)
+
+	wo = &World{}
+	concretenew(config, wo)
 
 	wo.Events = NewEventTracer(wo.Window.window, config.ReplayReader)
 	wo.sinks = make([]func(any), 1)
 	wo.keys = map[any]*labelt{}
+	wo.alloc = wo.allocmain
 	return wo
 }
