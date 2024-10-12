@@ -13,7 +13,7 @@ import (
 
 type Sorm = contraption.Sorm
 type World struct {
-	contraption.World
+	*contraption.World
 	Text func(size float64, str []rune) Sorm
 }
 
@@ -77,7 +77,10 @@ func main() {
 					case contraption.Drop:
 						p = `#ff00ff`
 					}
-					return wo.Rectangle(-1, -h).Fill(hexpaint(p))
+					_ = h
+					// return  wo.Rectangle(-1, -h).Fill(hexpaint(p))
+					return wo.Compound(
+						wo.Rectangle(10, 20).Fill(hexpaint(p)))
 				})),
 				wo.Limit(0, 10),
 				wo.Hfollow(),
