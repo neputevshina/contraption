@@ -5,6 +5,8 @@ import "unicode/utf8"
 // Sequence is the thing that can generate elements for a scroll-enabled compound.
 //
 // All the logic to differentiate scroll's elements must be in returned Sorms.
+// TODO Accept *World as an argument so methods won't be needed to close over it which
+// could possibly help to eliminate some stupid bugs in the future.
 type Sequence interface {
 	Get(i int) Sorm
 	Length() int
