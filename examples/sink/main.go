@@ -54,7 +54,6 @@ func main() {
 				scale = 1
 			}
 		}
-
 		wo.Root(
 			wo.Pretransform(geom.Scale2d(scale, scale)),
 			wo.Compound(
@@ -78,9 +77,9 @@ func main() {
 						p = `#ff00ff`
 					}
 					_ = h
-					// return  wo.Rectangle(-1, -h).Fill(hexpaint(p))
-					return wo.Compound(
-						wo.Rectangle(10, 20).Fill(hexpaint(p)))
+					return wo.Rectangle(-1, -h).Fill(hexpaint(p))
+					// return wo.Compound(
+					// 	wo.Rectangle(10, 20).Fill(hexpaint(p)))
 				})),
 				wo.Limit(0, 10),
 				wo.Hfollow(),
