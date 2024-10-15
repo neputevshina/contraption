@@ -176,6 +176,7 @@ const (
 	flagVshrink
 	flagSetStrokewidth
 	flagSequenceMark
+	flagSequenceSaved
 	flagBreakIteration
 )
 
@@ -374,6 +375,7 @@ type Sorm struct {
 
 	callerline int
 	callerfile string
+	pi         int
 }
 
 type Index struct {
@@ -389,6 +391,22 @@ func (s Sorm) kids2(wo *World) []Sorm {
 	return wo.pool[s.kidsl:s.kidsr]
 }
 
+func (wo *World) beginvirtual() (pool []Sorm) {
+	if sameslice(wo.pool, wo.auxpool) {
+		panic(`contraption: nested Sequences are not allowwed`)
+	}
+	pool = wo.pool
+	wo.pool = wo.auxpool
+	wo.nextn, wo.auxn = wo.auxn, wo.nextn
+	return
+}
+
+func (wo *World) endvirtual(pool []Sorm) {
+	wo.auxpool = wo.pool
+	wo.pool = pool
+	wo.nextn, wo.auxn = wo.auxn, wo.nextn
+}
+
 func (s Sorm) kidsiter(wo *World, f func(*Sorm)) {
 	// TODO Idea: take a limit in kidsiter, and if it is scissored, stop iteration when over it.
 	// It should work since scissored compounds can't stretch kids.
@@ -402,49 +420,37 @@ out:
 
 		q, ok := k.key.(Sequence)
 		if ok {
-			if k.kidsl == 0 {
+			if k.flags&flagSequenceSaved == 0 {
 				args := wo.tmpalloc(q.Length())
 				reall := len(wo.auxpool)
 				// Treat the aux pool as a main pool and a sequence as a root compound.
-				{
-					if sameslice(wo.pool, wo.auxpool) {
-						panic(`contraption: nested Sequences are not allowwed`)
-					}
-					pool := wo.pool
-					wo.pool = wo.auxpool
-					wo.nextn, wo.auxn = wo.auxn, wo.nextn
-					wo.prefix = k.z
-					// wo.alloc = wo.allocaux
 
-					for i := 0; i < q.Length(); i++ {
-						t := q.Get(i)
-						// t.z2 = i
-						// t.z = k.z
-						args[i] = t
-					}
-
-					wo.auxpool = wo.pool
-					wo.pool = pool
-					wo.nextn, wo.auxn = wo.auxn, wo.nextn
-					wo.prefix = 0
-
-					// wo.alloc = wo.allocmain
+				pop := wo.beginvirtual()
+				wo.prefix = k.z
+				for i := 0; i < q.Length(); i++ {
+					t := q.Get(i)
+					args[i] = t
 				}
+				wo.prefix = 0
+				wo.endvirtual(pop)
+
 				// Copy the elements materialized from sequence to the aux pool,
 				// treat them like arguments of (*World).Compound
 				l, r := wo.allocaux(q.Length())
 				copy(wo.auxpool[l:r], args)
 				k.kidsl = reall
 				k.kidsr = r
+				// Save immediate kids.
+				k.presl = l
+				k.presr = r
+				k.flags |= flagSequenceSaved
 			}
-			aux := wo.auxpool[k.kidsr-q.Length() : k.kidsr]
+			aux := wo.auxpool[k.presl:k.presr]
 			for i := range aux {
 				k := &aux[i]
-				pool := wo.pool
-				wo.pool = wo.auxpool
+				pop := wo.beginvirtual()
 				f(k) // (1)
-				wo.auxpool = wo.pool
-				wo.pool = pool
+				wo.endvirtual(pop)
 				if k.flags&flagBreakIteration > 0 { // (2)
 					break out
 				}
@@ -1533,24 +1539,48 @@ func (wo *World) Develop() {
 	// Do the layout.
 	wo.apply(nil, last(pool))
 
+	// Remember the parent of each Sequence.
+	for i := len(pool) - 1; i >= 0; i-- {
+		s := &pool[i]
+		ks := s.kids2(wo)
+		for j := range ks {
+			if ks[j].tag == tagSequence {
+				ks[j].pi = i
+			}
+		}
+	}
+
 	// Inherit moves and paints.
 	// TODO Maybe wo.apply should do it? Kind of makes more sense.
-	for i := len(pool) - 1; i >= 0; i-- {
-		c := &pool[i]
+	inh := func(c, efc *Sorm) {
 		c.kidsiter(wo, func(k *Sorm) {
-			k.x += c.x
-			k.y += c.y
-			k.scissor = k.scissor.Add(geom.Pt(c.x, c.y))
+			k.x += efc.x
+			k.y += efc.y
+			k.scissor = k.scissor.Add(geom.Pt(efc.x, efc.y))
 			if k.fill == (nanovgo.Paint{}) {
-				k.fill = c.fill
+				k.fill = efc.fill
 			}
 			if k.stroke == (nanovgo.Paint{}) {
-				k.stroke = c.stroke
+				k.stroke = efc.stroke
 			}
 			if k.flags&flagSetStrokewidth == 0 {
-				k.strokew = c.strokew
+				k.strokew = efc.strokew
 			}
 		})
+	}
+	for i := len(pool) - 1; i >= 0; i-- {
+		s := &pool[i]
+		if s.tag == tagSequence {
+			p := wo.beginvirtual()
+			pool := wo.auxpool[s.kidsl:s.kidsr]
+			for i := len(pool) - 1; i >= 0; i-- {
+				s := &pool[i]
+				inh(s, s)
+			}
+			wo.endvirtual(p)
+		} else {
+			inh(s, s)
+		}
 	}
 
 	// Print tree for debug. Do it before sorting.
@@ -1665,8 +1695,9 @@ func (wo *World) Develop() {
 				}
 				draw(s)
 			}
+		} else {
+			draw(s)
 		}
-		draw(s)
 	}
 
 	wo.Vgo.Reset()
