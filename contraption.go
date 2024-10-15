@@ -41,9 +41,9 @@
 //		- Why? Try to display STFT of a music file using Matplotlib, then rescale the window. Enjoy the delay.
 //	- Text area
 //		- https://rxi.github.io/textbox_behaviour.html
-//	- Sequence must be a special shape that pastes Sorms inside a compound, not being compound itself
+//	+ Sequence must be a special shape that pastes Sorms inside a compound, not being compound itself
 //		- So wo.Text(io.RuneReader) could be Sequence
-//		- Not clear how to reuse memory of pools in this case
+//		+ Not clear how to reuse memory of pools in this case
 // 	- Quadtree for pool
 //	- Matching past in regexps and coords change [MAJOR TOPIC]
 //		- Easily solved with hitmaps — just draw a hitmap with all component's transformations
@@ -361,7 +361,7 @@ type Sorm struct {
 	// 	- Compound stores an Identity, which also works
 	//	  out as Source's dropable object
 	// 	- Between stores func() Sorm
-	key any // TODO eqn and key must be one field, key can only be in compounds
+	key any
 
 	condfill       func(rect geom.Rectangle) nanovgo.Paint
 	condstroke     func(rect geom.Rectangle) nanovgo.Paint
@@ -371,11 +371,8 @@ type Sorm struct {
 
 	sinkid int
 
-	eyl float64
-
 	callerline int
 	callerfile string
-	pi         int
 }
 
 type Index struct {
@@ -455,10 +452,6 @@ out:
 					break out
 				}
 			}
-			// for i := range wo.auxpool {
-			// 	println(i, wo.auxpool[i])
-			// }
-			// os.Exit(1)
 		} else {
 			f(k)                                // (1)
 			if k.flags&flagBreakIteration > 0 { // (2)
@@ -541,8 +534,6 @@ func (s Sorm) String() string {
 		vals = fmt.Sprint(f(s.W), ", ", f(s.H), ", ", f(s.x), ", ", f(s.y), ", _", f(s.wl), ", _", f(s.hl))
 	} else {
 		vals = fmt.Sprint(f(s.W), "×", f(s.H), ", ", f(s.x), "y", f(s.y), ", ↓", f(s.wl), "×", f(s.hl), " ", color(p.innerColor))
-		// _ = color
-		// vals = fmt.Sprint(p.xform)
 	}
 	key := cond(s.key != nil, fmt.Sprint(" [", s.key, "]"), "")
 	ovrx := cond(s.flags&flagOvrx > 0, "↑X", "  ")
@@ -684,22 +675,6 @@ func (s Sorm) paint(wo *World, f func()) {
 		wo.Vgo.Stroke()
 	}
 }
-
-// // Get implements Sequence.
-// func (s *Sorm) Get(i int) Sorm {
-// 	if s.tag != tagCompound {
-// 		return *s
-// 	}
-// 	return s.kids(s.wo)[i]
-// }
-
-// // Length implements Sequence.
-// func (s *Sorm) Length() int {
-// 	if s.tag != tagCompound {
-// 		return 1
-// 	}
-// 	return len(s.kids(s.wo))
-// }
 
 // BaseWorld returns itself.
 // This method allows to access base World class from user worlds.
@@ -1332,120 +1307,6 @@ func (wo *World) compound2(s Sorm, realroot bool, args ...Sorm) Sorm {
 	return s
 }
 
-// TODO For use with Scroll()
-// func sequencesequencealigner(wo *World, c *Sorm, seq Sequence, h bool) {
-// 	known := geom.Pt(0, 0)
-// 	props := geom.Pt(c.W, c.H)
-// 	c.W, c.H = 0, 0
-// 	beginaxis := func(k *Sorm) {
-// 		if h {
-// 			// Y is main axis, X is secondary.
-// 			k.W, k.H = k.H, k.W
-// 			k.x, k.y = k.y, k.x
-// 			k.wl, k.hl = k.hl, k.wl
-// 		}
-// 	}
-// 	endaxis := beginaxis
-
-// 	// Get total known sizes for each axis.
-// 	// How-to:
-// 	//      - if total size by primary axis is greater than limit, escape
-// 	// 	- get an element from sequence
-// 	//	- materialize it and add size to primary axis
-// 	//	- repeat
-// 	//
-// 	for i := range c.kids() {
-// 		k := &c.kids()[i]
-
-// 		beginaxis(k)
-// 		if k.W > 0 {
-// 			known.X = max(known.X, k.W)
-// 		} else {
-// 			props.X = min(props.X, k.W)
-// 		}
-// 		if k.H >= 0 {
-// 			known.Y += k.H
-// 		} else {
-// 			props.Y -= k.H
-// 		}
-// 		endaxis(k)
-// 	}
-
-// 	// If there was no limit set for the secondary axis, let it be
-// 	// the biggest known size measured by it.
-// 	// if known.X > 0 && c.W > 0 {
-// 	// 	c.wl = known.X
-// 	// }
-
-// 	// Calculate unknowns and apply kids which sizes were unknown,
-// 	// lay out the sequence then.
-// 	y := 0.0
-// 	beginaxis(c)
-// 	for i := range c.kids() {
-// 		k := &c.kids()[i]
-
-// 		beginaxis(k)
-// 		stretch := false
-// 		if k.H < 0 {
-// 			k.H = max(0, (c.hl-known.Y)/props.Y*-k.H) // Don't stretch if we're out of limit.
-// 			stretch = true
-// 		}
-// 		if k.W < 0 {
-// 			k.W = c.wl / props.X * k.W
-// 			stretch = true
-// 		}
-// 		endaxis(k)
-
-// 		k.hl = k.H
-// 		k.wl = k.W
-// 		if stretch {
-// 			wo.apply(c, k)
-// 		}
-
-// 		beginaxis(k)
-// 		k.y += y
-// 		y += k.H
-// 		c.W = max(c.W, k.W)
-// 		endaxis(k)
-// 	}
-// 	c.H = y
-// 	endaxis(c)
-// }
-
-func (wo *World) Vscroll(ptr *Scrollptr, scrollpx float64, ylimit float64, seq Sequence) (s Sorm) {
-	// FIXME Needs one frame latency to repaint and handle new events.
-	prev := wo.Prevkey(ptr)
-	if prev.tag == 0 {
-		return
-	}
-
-	switch {
-	case wo.Events.MatchIn(`Scroll(-1)`, prev.Rectangle()):
-		scrollpx = -scrollpx
-	case wo.Events.MatchIn(`Scroll(1)`, prev.Rectangle()):
-		// No change
-	default:
-		scrollpx = 0
-	}
-
-	if ptr.Offset-scrollpx < 0 {
-		// Request previous shape
-		ptr.Index--
-	}
-	for i := ptr.Index; i <= seq.Length(); i++ {
-		// position wo.apply(seq.Get(i)) to pool like overflow
-
-		// do y summation
-
-		// y += last(wo.pool).H
-		// if y >= limit {
-		// 	y = limit
-		// 	break
-		// }
-	}
-	panic(`unimplemented`)
-}
-
 func (wo *World) Root(s ...Sorm) {
 	wo.Compound(
 		wo.Void(complex(wo.Wwin, 0), complex(wo.Hwin, 0)),
@@ -1538,17 +1399,6 @@ func (wo *World) Develop() {
 
 	// Do the layout.
 	wo.apply(nil, last(pool))
-
-	// Remember the parent of each Sequence.
-	for i := len(pool) - 1; i >= 0; i-- {
-		s := &pool[i]
-		ks := s.kids2(wo)
-		for j := range ks {
-			if ks[j].tag == tagSequence {
-				ks[j].pi = i
-			}
-		}
-	}
 
 	// Inherit moves and paints.
 	// TODO Maybe wo.apply should do it? Kind of makes more sense.

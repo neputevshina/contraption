@@ -78,8 +78,6 @@ func main() {
 					}
 					_ = h
 					return wo.Rectangle(-1, -h).Fill(hexpaint(p))
-					// return wo.Compound(
-					// 	wo.Rectangle(10, 20).Fill(hexpaint(p)))
 				})),
 				wo.Limit(0, 10),
 				wo.Hfollow(),

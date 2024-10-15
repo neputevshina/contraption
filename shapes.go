@@ -120,7 +120,6 @@ func (wo *World) NewVectorText(font []byte) func(size float64, str []rune) Sorm 
 	}
 }
 func vectortextrun(wo *World, s *Sorm) {
-	// TODO use io.RuneReader
 	wo.Vgo.ResetTransform()
 	fail := false
 	if s.fill != (nanovgo.Paint{}) {
@@ -138,7 +137,6 @@ func vectortextrun(wo *World, s *Sorm) {
 	}
 	wo.Vgo.SetTransform(nanovgo.TranslateMatrix(float32(s.x), float32(s.y+s.H))) // Top left
 
-	// Makealine(wo.Vgo, s.vecfont, s.H, s.key.([]rune))
 	MakealineReader(wo.Vgo, s.vecfont, s.H, s.key.(io.RuneScanner))
 
 	if s.fill != (nanovgo.Paint{}) {
@@ -293,18 +291,14 @@ func canvasrun(wo *World, s *Sorm) {
 }
 
 // Sequence transforms external data to stream of Sorms.
+// TO BE REMOVED.
 func (wo *World) Sequence(q Sequence, plus ...Sorm) (s Sorm) {
 	// TODO Visibility check
 	// FIXME Double allocation, implement sequencesequencealigner.
-
 	tmp := wo.tmpalloc(q.Length() + len(plus))
 	j := 0
 	for i := range tmp[:q.Length()] {
 		s := q.Get(i)
-		// Skip wo.Void(0,0)
-		// if s.tag == tagVoid && s.W == 0 && s.H == 0 {
-		// 	continue
-		// }
 		// Skip Sorm{}
 		if zero(s) {
 			continue
@@ -324,5 +318,5 @@ func (wo *World) Sequence2(q Sequence) (s Sorm) {
 	return s
 }
 func sequencerun(wo *World, s *Sorm) {
-
+	// Special form, see (*Sorm).kidsiter and (*World).Develop
 }
