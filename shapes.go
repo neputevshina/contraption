@@ -9,19 +9,19 @@ import (
 	"github.com/neputevshina/nanovgo"
 )
 
-func (wo *World) NewText(font []byte, capk float64) func(size float64, str string) Sorm {
-	return wo.generalNewText(font, capk, tagText)
+func (wo *World) NewText(font []byte) func(size float64, str string) Sorm {
+	return wo.generalNewText(font, tagText)
 }
 
-func (wo *World) NewTopDownText(font []byte, capk float64) func(size float64, str string) Sorm {
-	return wo.generalNewText(font, capk, tagTopDownText)
+func (wo *World) NewTopDownText(font []byte) func(size float64, str string) Sorm {
+	return wo.generalNewText(font, tagTopDownText)
 }
 
-func (wo *World) NewBottomUpText(font []byte, capk float64) func(size float64, str string) Sorm {
-	return wo.generalNewText(font, capk, tagBottomUpText)
+func (wo *World) NewBottomUpText(font []byte) func(size float64, str string) Sorm {
+	return wo.generalNewText(font, tagBottomUpText)
 }
 
-func (wo *World) generalNewText(font []byte, capk float64, kind tagkind) func(size float64, str string) Sorm {
+func (wo *World) generalNewText(font []byte, kind tagkind) func(size float64, str string) Sorm {
 	name := strconv.FormatUint(rand.Uint64(), 36)
 	f, err := NewFont(wo.Vgo, font, name)
 	if err != nil {
@@ -249,21 +249,9 @@ func equationrun(wo *World, s *Sorm) {
 	})
 }
 
-func (wo *World) Canvas(w, h complex128, run func(vgo *nanovgo.Context, rect geom.Rectangle)) (s Sorm) {
+func (wo *World) Canvas(w, h complex128, run func(vgo *nanovgo.Context, wt geom.Geom, rect geom.Rectangle)) (s Sorm) {
 	s = wo.newSorm()
 	s.tag = tagCanvas
-	s.canvas = run
-	s.W = real(w)
-	s.H = real(h)
-	s.addw = imag(w)
-	s.addh = imag(h)
-	return
-}
-func (wo *World) Canvas2(w, h complex128, run func(vgo *nanovgo.Context, rect geom.Rectangle)) (s Sorm) {
-	// FIXME Must be standard behavior of Canvas: scale by transform.
-	s = wo.newSorm()
-	s.tag = tagCanvas
-	s.r = 1
 	s.canvas = run
 	s.W = real(w)
 	s.H = real(h)
@@ -286,32 +274,12 @@ func canvasrun(wo *World, s *Sorm) {
 		vgo.SetStrokePaint(s.stroke)
 	}
 	vgo.SetStrokeWidth(s.strokew)
-	s.canvas(vgo, geom.Rect(s.x, s.y, s.x+s.W, s.y+s.H))
+	s.canvas(vgo, s.m, geom.Rect(s.x, s.y, s.x+s.W, s.y+s.H))
 	vgo.Restore()
 }
 
 // Sequence transforms external data to stream of Sorms.
-// TO BE REMOVED.
-func (wo *World) Sequence(q Sequence, plus ...Sorm) (s Sorm) {
-	// TODO Visibility check
-	// FIXME Double allocation, implement sequencesequencealigner.
-	tmp := wo.tmpalloc(q.Length() + len(plus))
-	j := 0
-	for i := range tmp[:q.Length()] {
-		s := q.Get(i)
-		// Skip Sorm{}
-		if zero(s) {
-			continue
-		}
-		tmp[j] = s
-		j++
-	}
-	copy(tmp[j:], plus)
-	return wo.compound(wo.newSorm(), tmp...)
-}
-
-// Sequence transforms external data to stream of Sorms.
-func (wo *World) Sequence2(q Sequence) (s Sorm) {
+func (wo *World) Sequence(q Sequence) (s Sorm) {
 	s = wo.newSorm()
 	s.tag = tagSequence
 	s.key = q

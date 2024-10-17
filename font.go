@@ -257,7 +257,7 @@ func makealinerd(vg *nanovgo.Context, font *Font, cap float64, runes io.RuneScan
 		r, _, err = runes.ReadRune()
 		c++
 	}
-	if err != nil && err != io.EOF {
+	if err != io.EOF {
 		panic(err)
 	}
 
