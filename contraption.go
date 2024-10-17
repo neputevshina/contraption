@@ -1126,7 +1126,6 @@ func (wo *World) apply(p *Sorm, c *Sorm) {
 	// Set scissor to limit if needed.
 	if c.flags&flagScissor > 0 {
 		c.scissor = geom.Rect(0, 0, c.wl, c.hl)
-		c.scissor = c.m.ApplyRect(c.scissor)
 	}
 	c.kidsiter(wo, func(k *Sorm) {
 		k.wl = c.wl
