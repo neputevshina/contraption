@@ -17,19 +17,10 @@ import (
 
 	"github.com/neputevshina/geom"
 	"github.com/neputevshina/nanovgo"
-	"golang.design/x/clipboard"
 	"golang.org/x/exp/constraints"
 	"golang.org/x/image/font/sfnt"
 	"golang.org/x/image/math/fixed"
 )
-
-type SuperOf[T any] interface {
-	SuperOf() *T
-}
-
-type Super interface {
-	Super() any
-}
 
 const maxint = int(^uint(0) >> 1)
 
@@ -393,30 +384,6 @@ func must(err error) {
 	}
 }
 
-type Pub[T any] struct {
-	v  T
-	fs []func()
-}
-
-func (pub *Pub[T]) Ping() {
-	for _, f := range pub.fs {
-		f()
-	}
-}
-
-func (pub *Pub[T]) Set(effect func(v *T)) {
-	effect(&pub.v)
-	pub.Ping()
-}
-
-func (pub *Pub[T]) Get() T { return pub.v }
-
-func Subscribe[P, S any](pub *Pub[P], d *S, tr func(P) S) {
-	pub.fs = append(pub.fs, func() {
-		*d = tr(pub.v)
-	})
-}
-
 type Symbol int
 
 const (
@@ -431,10 +398,6 @@ func mmtopt(mm float64) float64 {
 
 func pttomm(pt float64) float64 {
 	return pt * 720 / 254
-}
-
-func ctrlc(s string) {
-	clipboard.Write(clipboard.FmtText, []byte(s))
 }
 
 func cceil(c complex128) complex128 {

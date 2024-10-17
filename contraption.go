@@ -148,7 +148,6 @@ import (
 	"image"
 	"io"
 	"math"
-	"math/rand"
 	"os"
 	"runtime"
 	"strings"
@@ -367,7 +366,7 @@ type Sorm struct {
 	condstroke     func(rect geom.Rectangle) nanovgo.Paint
 	condfillstroke func(rect geom.Rectangle) (nanovgo.Paint, nanovgo.Paint)
 	cond           func(m Matcher)
-	canvas         func(vg *nanovgo.Context, rect geom.Rectangle)
+	canvas         func(vgo *nanovgo.Context, wt geom.Geom, rect geom.Rectangle)
 
 	sinkid int
 
@@ -418,14 +417,14 @@ out:
 		q, ok := k.key.(Sequence)
 		if ok {
 			if k.flags&flagSequenceSaved == 0 {
-				args := wo.tmpalloc(q.Length())
+				args := wo.tmpalloc(q.Length(wo))
 				reall := len(wo.auxpool)
-				// Treat the aux pool as a main pool and a sequence as a root compound.
 
+				// Treat the aux pool as a main pool and a sequence as a root compound.
 				pop := wo.beginvirtual()
 				wo.prefix = k.z
-				for i := 0; i < q.Length(); i++ {
-					t := q.Get(i)
+				for i := 0; i < q.Length(wo); i++ {
+					t := q.Get(wo, i)
 					args[i] = t
 				}
 				wo.prefix = 0
@@ -433,7 +432,7 @@ out:
 
 				// Copy the elements materialized from sequence to the aux pool,
 				// treat them like arguments of (*World).Compound
-				l, r := wo.allocaux(q.Length())
+				l, r := wo.allocaux(q.Length(wo))
 				copy(wo.auxpool[l:r], args)
 				k.kidsl = reall
 				k.kidsr = r
@@ -1355,9 +1354,7 @@ func (wo *World) Next() bool {
 
 	wo.Vgo.SetFontFace(`go`)
 	wo.Vgo.SetFontSize(17) // FIXME Cap size of Go 17 is 11
-	// setFontSize(vg, 11)
 
-	rand.Seed(405)
 	return true
 }
 

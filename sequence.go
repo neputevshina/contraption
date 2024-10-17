@@ -8,8 +8,8 @@ import "unicode/utf8"
 // TODO Accept *World as an argument so methods won't be needed to close over it which
 // could possibly help to eliminate some stupid bugs in the future.
 type Sequence interface {
-	Get(i int) Sorm
-	Length() int
+	Get(wo *World, i int) Sorm
+	Length(wo *World) int
 }
 
 type adhocSequence struct {
@@ -17,11 +17,11 @@ type adhocSequence struct {
 	length func() int
 }
 
-func (s *adhocSequence) Get(i int) Sorm {
+func (s *adhocSequence) Get(wo *World, i int) Sorm {
 	return s.get(i)
 }
 
-func (s *adhocSequence) Length() int {
+func (s *adhocSequence) Length(wo *World) int {
 	return s.length()
 }
 
@@ -51,26 +51,26 @@ type appendSequence struct {
 	orig  Sequence
 }
 
-func (s *appendSequence) Get(i int) Sorm {
+func (s *appendSequence) Get(wo *World, i int) Sorm {
 	if s.pre {
 		al := len(s.affix)
 		if i < al {
 			return s.affix[i]
 		} else {
-			return s.orig.Get(al - i)
+			return s.orig.Get(wo, al-i)
 		}
 	} else {
-		al := s.orig.Length()
+		al := s.orig.Length(wo)
 		if i < al {
-			return s.orig.Get(i)
+			return s.orig.Get(wo, i)
 		} else {
 			return s.affix[al-i]
 		}
 	}
 }
 
-func (s *appendSequence) Length() int {
-	return s.orig.Length() + len(s.affix)
+func (s *appendSequence) Length(wo *World) int {
+	return s.orig.Length(wo) + len(s.affix)
 }
 
 func PrependSeq(seq Sequence, wo *World, s ...Sorm) Sequence {
@@ -95,13 +95,13 @@ type stringSeq struct {
 	produce       func(rune) Sorm
 }
 
-func (s *stringSeq) Get(i int) Sorm {
+func (s *stringSeq) Get(wo *World, i int) Sorm {
 	r, sz := utf8.DecodeRuneInString(s.string[s.consumed:])
 	s.consumed += sz
 	return s.produce(r)
 }
 
-func (s *stringSeq) Length() int {
+func (s *stringSeq) Length(wo *World) int {
 	return s.len
 }
 
