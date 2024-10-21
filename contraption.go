@@ -800,7 +800,7 @@ func (wo *World) Stroke(p nanovgo.Paint) (s Sorm) {
 }
 func strokerun(wo *World, s, m *Sorm) {
 	s.kidsiter(wo, func(k *Sorm) {
-		if k.tag > 0 {
+		if k.tag >= 0 {
 			k.stroke = m.stroke
 		}
 	})
@@ -815,7 +815,7 @@ func (wo *World) Strokewidth(w float64) (s Sorm) {
 func strokewidthrun(wo *World, s, m *Sorm) {
 	s.flags |= flagSetStrokewidth
 	s.kidsiter(wo, func(k *Sorm) {
-		if k.tag > 0 {
+		if k.tag >= 0 {
 			k.strokew = m.strokew
 		}
 	})

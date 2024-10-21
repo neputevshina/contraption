@@ -180,24 +180,25 @@ func (wo *World) Examples() Sorm {
 			wo.BetweenVoid(32, 0),
 			wo.Example(`Stretch`, func() Sorm {
 				return wo.Compound(
+					wo.Stroke(dark),
 					wo.Limit(100, 100),
 					wo.Compound(
 						wo.Hfollow(),
-						wo.Rectangle(-1, -1).Stroke(dark),
-						wo.Rectangle(-2, -1).Stroke(dark),
+						wo.Rectangle(-1, -1),
+						wo.Rectangle(-2, -1),
 						wo.Compound(
 							wo.Vfollow(),
-							wo.Rectangle(-1, -1).Stroke(dark),
-							wo.Rectangle(-1, -1).Stroke(dark),
-							wo.Rectangle(-1, -1).Stroke(dark),
+							wo.Rectangle(-1, -1),
+							wo.Rectangle(-1, -1),
+							wo.Rectangle(-1, -1),
 						),
-						wo.Rectangle(-2, -2).Stroke(dark),
+						wo.Rectangle(-2, -2),
 						wo.Compound(
 							wo.Hfollow(),
-							wo.Rectangle(-1, -1).Stroke(dark),
-							wo.Rectangle(-1, -1).Stroke(dark),
-							wo.Rectangle(-1, -1).Stroke(dark),
-							wo.Rectangle(-1, -1).Stroke(dark),
+							wo.Rectangle(-1, -1),
+							wo.Rectangle(-1, -1),
+							wo.Rectangle(-1, -1),
+							wo.Rectangle(-1, -1),
 						),
 					))
 			}),
