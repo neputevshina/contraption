@@ -424,3 +424,12 @@ func sameslice[T any](a, b []T) bool {
 		return false
 	}
 }
+
+func oneof[T comparable](a T, as ...T) bool {
+	for _, v := range as {
+		if v == a {
+			return true
+		}
+	}
+	return false
+}

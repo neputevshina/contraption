@@ -7,6 +7,9 @@
 //	- Remove Canvas2: accept Geom as an argument to painting func
 //
 // TODO:
+//	- Round shape sizes inside aligners.
+//		- Noround modifier
+//		? Smooth rounding — don't round if in motion
 //	? LimitOverride
 //	- Grid aligner
 //		- wo.Hgrid(cols int) + wo.Halign() — secondary alignment
@@ -182,6 +185,9 @@ const (
 //go:generate stringer -type=tagkind -trimprefix=tag
 type tagkind int
 
+//go:generate stringer -type=alignerkind
+type alignerkind int
+
 const (
 	tagCompound tagkind = 0
 )
@@ -220,18 +226,23 @@ const (
 	tagTransform
 	tagPretransform
 	tagScissor
-	tagVfollow
-	tagHfollow
 	tagHshrink
 	tagVshrink
 	tagLimit
+	tagVfollow
+	tagHfollow
+)
+const (
+	alignerNone alignerkind = iota
+	alignerVfollow
+	alignerHfollow
 )
 
 // NOTE This might actually be a single table, if needed.
-var modActions [100]func(wo *World, compound, mod *Sorm)
 var preActions [100]func(wo *World, compound, mod *Sorm)
-var shapeActions [100]func(wo *World, shape *Sorm)
 var alignerActions [100]func(wo *World, compound *Sorm)
+var shapeActions [100]func(wo *World, shape *Sorm)
+var modActions [100]func(wo *World, compound, mod *Sorm)
 
 // Before troubleshooting Sorm-returning methods, check this:
 //   - tagX -> xrun
@@ -272,9 +283,9 @@ func init() {
 	preActions[-100-tagHshrink] = hshrinkrun
 	preActions[-100-tagVshrink] = vshrinkrun
 
-	alignerActions[0] = noaligner
-	alignerActions[1] = vfollowaligner
-	alignerActions[2] = hfollowaligner
+	alignerActions[alignerNone] = noaligner
+	alignerActions[alignerVfollow] = vfollowaligner
+	alignerActions[alignerHfollow] = hfollowaligner
 }
 
 type Eqn func(pt geom.Point) (dist float64)
@@ -338,13 +349,16 @@ type Sorm struct {
 	addw, addh   float64
 	r, x, y      float64
 	m, prem      geom.Geom
-	aligner      int
+	aligner      alignerkind
+	known, props geom.Point
 	kidsl, kidsr,
 	modsl, modsr,
 	presl, presr int
 
 	index *Index
 
+	// TODO Essentially, this is always equal to (0, 0, wl, hl) when unscaled.
+	//	Makes sense to remove wl and hl and only use this.
 	scissor geom.Rectangle
 
 	fill    nanovgo.Paint
@@ -556,7 +570,7 @@ func (s Sorm) String() string {
 	}
 	scissor := cond(s.scissor.Dx() > 0 && s.scissor.Dy() > 0, fmt.Sprint(s.scissor), "{/}")
 
-	return fmt.Sprint(z, strings.Repeat(" ", max(0, 10-digits)), seq, ovrx, ovry, btw, " ", s.tag.String(), " ", vals, ` `, scissor, key, " ", s.callerfile, ":", s.callerline)
+	return fmt.Sprint(z, strings.Repeat(" ", max(0, 10-digits)), seq, ovrx, ovry, btw, " ", s.tag.String(), " ", vals, ` `, s.props, ` `, scissor, key, " ", s.callerfile, ":", s.callerline)
 }
 
 func (s Sorm) decimate() Sorm {
@@ -716,7 +730,7 @@ func (wo *World) Vfollow() (s Sorm) {
 	return
 }
 func vfollowrun(wo *World, c, m *Sorm) {
-	c.aligner = 1
+	c.aligner = alignerVfollow
 }
 
 func (wo *World) Hfollow() (s Sorm) {
@@ -725,7 +739,7 @@ func (wo *World) Hfollow() (s Sorm) {
 	return
 }
 func hfollowrun(wo *World, c, m *Sorm) {
-	c.aligner = 2
+	c.aligner = alignerHfollow
 }
 
 func (wo *World) Halign(amt float64) (s Sorm) {
@@ -938,13 +952,13 @@ func limitrun(wo *World, s, m *Sorm) {
 	p := s.m.ApplyPt(geom.Pt(m.W, m.H))
 	if m.W > 0 {
 		m.W = p.X
-		s.wl = m.W
+		s.wl = min(s.wl, m.W)
 	} else if m.W < 0 {
 		s.W = m.W
 	}
 	if m.H > 0 {
 		m.H = p.Y
-		s.hl = m.H
+		s.hl = min(s.hl, m.H)
 	} else if m.H < 0 {
 		s.H = m.H
 	}
@@ -1029,43 +1043,54 @@ func hfollowaligner(wo *World, c *Sorm) {
 	sequencealigner(wo, c, true)
 }
 
-func sequencealigner(wo *World, c *Sorm, h bool) {
-	known := geom.Pt(0, 0)
-	props := geom.Pt(c.W, c.H)
-	c.W, c.H = 0, 0
-	beginaxis := func(k *Sorm) {
+func axis(h bool) (begin, end func(k *Sorm)) {
+	swap := func(k *Sorm) {
 		if h {
 			// Y is main axis, X is secondary.
 			k.W, k.H = k.H, k.W
 			k.x, k.y = k.y, k.x
 			k.wl, k.hl = k.hl, k.wl
+			k.props.X, k.props.Y = k.props.Y, k.props.X
+			k.known.X, k.known.Y = k.known.Y, k.known.X
 		}
 	}
-	endaxis := beginaxis
+	return swap, swap
+}
 
-	// Get total known sizes for each axis.
+func sequencedivider(wo *World, c *Sorm, h bool) {
+	beginaxis, endaxis := axis(h)
+	beginaxis(c)
 	c.kidsiter(wo, func(k *Sorm) {
 		beginaxis(k)
-		if k.W > 0 {
-			known.X = max(known.X, k.W)
+		if k.tag == 0 {
+			// beginprops(k)
+			c.props.X = max(c.props.X, k.props.X)
+			c.props.Y += k.props.Y
+			// endprops(k)
+			goto end
+		}
+		if k.W >= 0 {
+			c.known.X = max(c.known.X, k.W)
 		} else {
-			props.X = min(props.X, k.W)
+			c.props.X = max(c.props.X, -k.W)
 		}
 		if k.H >= 0 {
-			known.Y += k.H
+			c.known.Y += k.H
 		} else {
-			props.Y -= k.H
+			c.props.Y += -k.H
 		}
+		if k.tag != 0 {
+			k.props = geom.Pt(-min(0, k.W), -min(0, k.H))
+		}
+	end:
 		endaxis(k)
 	})
+	endaxis(c)
+}
 
-	// If there was no limit set for the secondary axis, let it be
-	// the biggest known size measured by it.
-	// if known.X > 0 && c.W > 0 {
-	// 	if c.wl == 0 {
-	// 		c.wl = known.X
-	// 	}
-	// }
+func sequencealigner(wo *World, c *Sorm, h bool) {
+	c.W, c.H = 0, 0
+	beginaxis, endaxis := axis(h)
 
 	// Calculate unknowns and apply kids which sizes were unknown,
 	// lay out the sequence then.
@@ -1074,26 +1099,24 @@ func sequencealigner(wo *World, c *Sorm, h bool) {
 	c.kidsiter(wo, func(k *Sorm) {
 		beginaxis(k)
 		stretch := false
-		if k.H < 0 {
-			k.H = max(0, (c.hl-known.Y)/props.Y*-k.H) // Don't stretch if we're out of limit.
+		if k.props.Y > 0 {
+			k.H = max(0, (c.hl-c.known.Y)/c.props.Y*k.props.Y) // Don't stretch if we're out of limit.
+			k.hl = k.H
 			stretch = true
 		}
-		if k.W < 0 {
-			k.W = c.wl / props.X * k.W
+		if k.props.X > 0 {
+			k.W = c.wl / c.props.X * k.props.X
+			k.wl = k.W
 			stretch = true
 		}
 		endaxis(k)
 
-		if k.tag != 0 {
-			k.hl = k.H
-			k.wl = k.W
-		}
 		if stretch {
 			wo.apply(c, k)
 		}
 
 		beginaxis(k)
-		k.y += y
+		k.y = y
 		y += k.H
 		c.W = max(c.W, k.W)
 		endaxis(k)
@@ -1102,7 +1125,7 @@ func sequencealigner(wo *World, c *Sorm, h bool) {
 	endaxis(c)
 }
 
-func (wo *World) apply(p *Sorm, c *Sorm) {
+func (wo *World) apply(_ *Sorm, c *Sorm) {
 	// Apply is called on every shape, so ignore anything that is not Compound.
 	if c.tag != 0 {
 		return
@@ -1113,36 +1136,24 @@ func (wo *World) apply(p *Sorm, c *Sorm) {
 		return int(b.tag - a.tag)
 	})
 	for _, m := range c.pres(wo) {
-		// TODO
-		// if m.tag == tagLimit {
-		// 	continue
-		// }
+		// A loop in (*World).resolvealigners is idemponent to this one
+		// in the case of tagVfollow and tagHfollow.
 		preActions[-100-m.tag](wo, c, &m)
 	}
 
-	// nl := p.m.ApplyPt(geom.Pt(c.wl, c.hl))
-	// c.wl = cond(c.wl >= 0, nl.X, c.wl)
-	// c.hl = cond(c.wl >= 0, nl.Y, c.hl)
 	// Set scissor to limit if needed.
 	if c.flags&flagScissor > 0 {
 		c.scissor = geom.Rect(0, 0, c.wl, c.hl)
 	}
 	c.kidsiter(wo, func(k *Sorm) {
+		// NOTE Aligner is called after these assignments.
+		// 	So this can't influence limits at later stages.
 		k.wl = c.wl
 		k.hl = c.hl
 		// Inherit scissors and apply scale to them.
 		k.scissor = c.scissor
 
-		// The Limit modifier is remote, meaning parent applies it to the child.
-		// TODO Separate it from other modifiers, possibly create a new category.
-		// for _, m := range k.pres(wo) {
-		// 	if m.tag == tagLimit {
-		// 		preActions[-100-m.tag](wo, k, &m)
-		// 	}
-		// }
-
 		// Apply scale.
-		k.m = k.m.Mul(c.m)
 		ns := k.m.ApplyPt(geom.Pt(k.W, k.H))
 		ims := k.m.ApplyPt(geom.Pt(k.addw, k.addh))
 		// Don't scale stretch coefficients.
@@ -1357,13 +1368,20 @@ func (wo *World) Next() bool {
 	return true
 }
 
-// func reachCheck(wo *World, pool []Sorm) {
-// 	for i := range pool {
-// 		k := &pool[i]
-// 		k.flags |= flagMark
-// 		reachCheck(wo, k.kids(wo))
-// 	}
-// }
+func (wo *World) resolvealigners(_ *Sorm, c *Sorm) {
+	if c.tag != 0 {
+		return
+	}
+	// A premodifier loop in (*World).apply is idemponent to this one.
+	for _, m := range c.pres(wo) {
+		if oneof(m.tag, tagVfollow, tagHfollow) {
+			preActions[-100-m.tag](wo, c, &m)
+		}
+	}
+	c.kidsiter(wo, func(k *Sorm) {
+		wo.resolvealigners(c, k)
+	})
+}
 
 // Develop applies the layout and renders the next frame.
 // See package description for preferred use of Contraption.
@@ -1377,14 +1395,35 @@ func (wo *World) Develop() {
 
 	pool := wo.pool[0:wo.rend]
 
-	// reachCheck(wo, pool)
 	for i := range pool {
 		pool[i].i = i
-		// if !(pool[i].flags&flagMark > 0) {
-		// 	pool[i].tag = tagVoid
-		// 	pool[i].W = 0
-		// 	pool[i].H = 0
-		// }
+	}
+
+	// Resolve aligners and stack negative sizes.
+	wo.resolvealigners(nil, last(pool))
+	for i := 0; i < len(pool); i++ {
+		s := &pool[i]
+		if s.tag == tagSequence {
+			p := wo.beginvirtual()
+			pool := wo.auxpool[s.kidsl:s.kidsr]
+			for i := len(pool) - 1; i >= 0; i-- {
+				s := &pool[i]
+				switch s.aligner {
+				case alignerVfollow:
+					sequencedivider(wo, s, false)
+				case alignerHfollow:
+					sequencedivider(wo, s, true)
+				}
+			}
+			wo.endvirtual(p)
+		} else {
+			switch s.aligner {
+			case alignerVfollow:
+				sequencedivider(wo, s, false)
+			case alignerHfollow:
+				sequencedivider(wo, s, true)
+			}
+		}
 	}
 
 	if wo.Events.Match(`Press(F4)`) {

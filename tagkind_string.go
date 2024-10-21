@@ -19,6 +19,7 @@ func _() {
 	_ = x[tagVectorText-8]
 	_ = x[tagTopDownText-9]
 	_ = x[tagBottomUpText-10]
+	_ = x[tagSequence-11]
 	_ = x[tagHalign - -1]
 	_ = x[tagValign - -2]
 	_ = x[tagFill - -3]
@@ -35,21 +36,21 @@ func _() {
 	_ = x[tagTransform - -101]
 	_ = x[tagPretransform - -102]
 	_ = x[tagScissor - -103]
-	_ = x[tagVfollow - -104]
-	_ = x[tagHfollow - -105]
-	_ = x[tagHshrink - -106]
-	_ = x[tagVshrink - -107]
-	_ = x[tagLimit - -108]
+	_ = x[tagHshrink - -104]
+	_ = x[tagVshrink - -105]
+	_ = x[tagLimit - -106]
+	_ = x[tagVfollow - -107]
+	_ = x[tagHfollow - -108]
 }
 
 const (
-	_tagkind_name_0 = "LimitVshrinkHshrinkHfollowVfollowScissorPretransformTransform"
-	_tagkind_name_1 = "SinkSourceScrollBetweenCondstrokeCondfillCondIdentityStrokewidthStrokeFillValignHalignCompoundCircleRectRoundrectVoidEquationTextCanvasVectorTextTopDownTextBottomUpText"
+	_tagkind_name_0 = "HfollowVfollowLimitVshrinkHshrinkScissorPretransformTransform"
+	_tagkind_name_1 = "SinkSourceScrollBetweenCondstrokeCondfillCondIdentityStrokewidthStrokeFillValignHalignCompoundCircleRectRoundrectVoidEquationTextCanvasVectorTextTopDownTextBottomUpTextSequence"
 )
 
 var (
-	_tagkind_index_0 = [...]uint8{0, 5, 12, 19, 26, 33, 40, 52, 61}
-	_tagkind_index_1 = [...]uint8{0, 4, 10, 16, 23, 33, 41, 45, 53, 64, 70, 74, 80, 86, 94, 100, 104, 113, 117, 125, 129, 135, 145, 156, 168}
+	_tagkind_index_0 = [...]uint8{0, 7, 14, 19, 26, 33, 40, 52, 61}
+	_tagkind_index_1 = [...]uint8{0, 4, 10, 16, 23, 33, 41, 45, 53, 64, 70, 74, 80, 86, 94, 100, 104, 113, 117, 125, 129, 135, 145, 156, 168, 176}
 )
 
 func (i tagkind) String() string {
@@ -57,7 +58,7 @@ func (i tagkind) String() string {
 	case -108 <= i && i <= -101:
 		i -= -108
 		return _tagkind_name_0[_tagkind_index_0[i]:_tagkind_index_0[i+1]]
-	case -13 <= i && i <= 10:
+	case -13 <= i && i <= 11:
 		i -= -13
 		return _tagkind_name_1[_tagkind_index_1[i]:_tagkind_index_1[i+1]]
 	default:

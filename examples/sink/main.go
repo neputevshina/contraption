@@ -186,10 +186,16 @@ func (wo *World) Examples() Sorm {
 						wo.Rectangle(-1, -1).Stroke(dark),
 						wo.Rectangle(-2, -1).Stroke(dark),
 						wo.Compound(
-							// TODO Ways to determine size of a compound if all of
-							// its members are stretchy.
+							wo.Vfollow(),
+							wo.Rectangle(-1, -1).Stroke(dark),
+							wo.Rectangle(-1, -1).Stroke(dark),
+							wo.Rectangle(-1, -1).Stroke(dark),
+						),
+						wo.Rectangle(-2, -2).Stroke(dark),
+						wo.Compound(
 							wo.Hfollow(),
-							wo.Limit(20, 0),
+							wo.Rectangle(-1, -1).Stroke(dark),
+							wo.Rectangle(-1, -1).Stroke(dark),
 							wo.Rectangle(-1, -1).Stroke(dark),
 							wo.Rectangle(-1, -1).Stroke(dark),
 						),
