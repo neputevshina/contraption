@@ -28,7 +28,7 @@ type rinst struct {
 
 	e          any
 	typeonly   bool
-	in, out    bool
+	where      pegRule
 	begin, end bool
 
 	x, y int
@@ -36,10 +36,12 @@ type rinst struct {
 
 func (i *rinst) String() string {
 	var in, begin, end string
-	if i.in {
+	switch i.where {
+	case 0:
+		in = " any"
+	case 1:
 		in = " in"
-	}
-	if i.out {
+	case 2:
 		in = " out"
 	}
 	if i.begin {
@@ -137,12 +139,7 @@ func rvisit(n, p *node32, pattern []rune) []rinst {
 		for left != nil {
 			switch left.pegRule {
 			case ruleRect:
-				switch left.up.pegRule {
-				case ruleOut:
-					pt.out = true
-				case ruleIn:
-					pt.in = true
-				}
+				pt.where = left.up.pegRule
 			case ruleTime:
 				switch left.up.pegRule {
 				case ruleBegin:
@@ -219,7 +216,7 @@ func rvisit(n, p *node32, pattern []rune) []rinst {
 }
 
 // rinterp is the threaded regular expression bytecode vm taken from https://swtch.com/~rsc/regexp/regexp2.html#thompsonvm.
-func rinterp(program []rinst, trace []EventPoint, rect geom.Rectangle, dur time.Duration, deadline time.Time, z int) (bool, EventTraceLast) {
+func rinterp(program []rinst, trace []EventPoint, rect geom.Rectangle, dur time.Duration, deadline time.Time, z int, alwaysin bool) (bool, EventTraceLast) {
 	// println(`rinterp`)
 	type rthread = int
 	cs := make([]rthread, 0, len(program))
@@ -244,12 +241,18 @@ func rinterp(program []rinst, trace []EventPoint, rect geom.Rectangle, dur time.
 					}
 					trace[j].zc = z
 				}()
-				// // This comparison is dependent on the Cond evaluation order in (*World).Develop.
-				if v.in && !sv.Pt.In(rect) {
-					return
+				// This comparison is dependent on the Cond evaluation order in (*World).Develop.
+				where := v.where
+				if alwaysin && where == 0 {
+					where = ruleIn
 				}
-				if v.out && sv.Pt.In(rect) {
-					return
+				if where != ruleAnywhere {
+					if where == ruleIn && !sv.Pt.In(rect) {
+						return
+					}
+					if where == ruleOut && sv.Pt.In(rect) {
+						return
+					}
 				}
 				// If left (ending) time is not specified first match will be it.
 				if left == (time.Time{}) {

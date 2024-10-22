@@ -101,7 +101,7 @@ func main() {
 						wo.Void(-1, 0),
 						wo.Label(strconv.FormatFloat(scale*100, 'f', 0, 64), "%").
 							Cond(func(m contraption.Matcher) {
-								if m.Match(`Click:in`) {
+								if m.Match(`Click`) {
 									scale = 1.0
 								}
 							}),
@@ -294,7 +294,7 @@ func (wo *World) Drop(filename *string, mime string) Sorm {
 			wo.Void(10, 20),
 		)).
 		Cond(func(m contraption.Matcher) {
-			pat := `Drop:in`
+			pat := `Drop`
 			if mime != `` {
 				pat = `Drop(` + mime + `):in`
 			}
@@ -315,16 +315,16 @@ func (wo *World) Numbox(v *float64) Sorm {
 			wo.Void(-1, -1),
 			wo.Rectangle(complex(-*v, 0), -1).Fill(yellow)),
 		wo.Void(-1+8i, -1+8i).Cond(func(m contraption.Matcher) {
-			if m.Duration(300 * time.Millisecond).Match(`Click(1):in .* Unclick(1):in Click(1):in`) {
+			if m.Duration(300 * time.Millisecond).Match(`Click(1) .* Unclick(1) Click(1)`) {
 				*v = 0
 			}
-			if m.Match(`Click(1):in`) {
+			if m.Match(`Click(1)`) {
 				wo.Window.SetInputMode(glfw.CursorMode, glfw.CursorDisabled)
 				*wo.Key(v) = wo.Trace[0].Pt.Y
 			}
-			if m.Match(`!Unclick(1)* Click(1):in`) {
+			if m.Match(`!Unclick(1):any* Click(1):in`) {
 				c := 0.001
-				if m.Nochoke().Match(`!Release(Shift)* Press(Shift)`) {
+				if m.Nochoke().Anywhere().Match(`!Release(Shift)* Press(Shift)`) {
 					c = 0.0001
 				}
 				if *wo.Key(v) != nil {
@@ -334,7 +334,7 @@ func (wo *World) Numbox(v *float64) Sorm {
 				}
 				*wo.Key(v) = wo.Trace[0].Pt.Y
 			}
-			if m.Nochoke().Match(`Unclick(1)`) {
+			if m.Nochoke().Match(`Unclick(1):any`) {
 				wo.Window.SetInputMode(glfw.CursorMode, glfw.CursorNormal)
 			}
 		}),

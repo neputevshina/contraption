@@ -36,8 +36,6 @@ Cat <- Point ([ \t\n]* Cat)?
 //Group <- '(' SP Alter SP ')' {panic("currently not supported")} Loop?
 
 Point <- Concrete (Any/Several/Maybe/LazyAny/LazySeveral/LazyMaybe)?
-//Point <- (Concrete / Joker) Loop?
-//Joker <- '.' {panic("jokers are not implemented, sorry")}
 Concrete <- Type
 	('(' SP Value SP ')')? 
 	(Rect Time? / Time? Rect?)
@@ -54,9 +52,10 @@ LazyMaybe <- '??'
 Type <- Token
 Value <- Number / Char / Token
 
-Rect <- In / Out
+Rect <- In / Out / Anywhere
 In <- ':in'
 Out <- ':out'
+Anywhere <- ':any'
 Time <- Begin / End
 Begin <- ':begin'
 End <- ':end'

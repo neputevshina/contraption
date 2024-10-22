@@ -180,12 +180,14 @@ func (u *Events) trueemit(ev interface{}, pt geom.Point, t time.Time) {
 func (u *Events) In(r geom.Rectangle) Matcher {
 	m := newMatcher(u)
 	m.rect = r
+	m.alwaysin = true
 	return m
 }
 
 func (u *Events) Anywhere() Matcher {
 	m := newMatcher(u)
 	m.rect = geom.Rect(-123456, -132412, 142323, 123111)
+	m.alwaysin = false
 	return m
 }
 
@@ -197,6 +199,7 @@ type Matcher struct {
 	dur      time.Duration
 	deadline time.Time
 	z        int
+	alwaysin bool
 }
 
 func newMatcher(e *Events) Matcher {
@@ -237,58 +240,63 @@ func (m Matcher) Nochoke() Matcher {
 	return m
 }
 
+func (m Matcher) Anywhere() Matcher {
+	m.alwaysin = false
+	return m
+}
+
 func (m Matcher) Indef() Matcher {
 	m.deadline = time.Time{}
 	return m
 }
 
 func (m Matcher) Match(pattern string) bool {
-	return m.u.match(pattern, m.rect, m.dur, m.deadline, m.z)
+	return m.u.match(pattern, m.rect, m.dur, m.deadline, m.z, m.alwaysin)
 }
 
 func (u *Events) Match(pattern string) bool {
-	return u.match(pattern, geom.Rect(-99999, -99999, 99999, 99999), time.Duration(^uint64(0)>>1), u.Now, 0)
+	return u.match(pattern, geom.Rect(-99999, -99999, 99999, 99999), time.Duration(^uint64(0)>>1), u.Now, 0, false)
 }
 
 // Hint: :in. And add MatchAllIn later, for fuck's sake.
 func (u *Events) MatchIn(pattern string, r geom.Rectangle) bool {
-	return u.match(pattern, r, time.Duration(^uint64(0)>>1), u.Now, 0)
+	return u.match(pattern, r, time.Duration(^uint64(0)>>1), u.Now, 0, false)
 }
 
 func (u *Events) MatchInNochoke(pattern string, r geom.Rectangle) bool {
 	// TODO
-	return u.match(pattern, r, time.Duration(^uint64(0)>>1), u.Now, maxint)
+	return u.match(pattern, r, time.Duration(^uint64(0)>>1), u.Now, maxint, false)
 }
 
 func (u *Events) MatchIndef(pattern string) bool {
-	return u.match(pattern, geom.Rect(-99999, -99999, 99999, 99999), time.Duration(^uint64(0)>>1), time.Time{}, 0)
+	return u.match(pattern, geom.Rect(-99999, -99999, 99999, 99999), time.Duration(^uint64(0)>>1), time.Time{}, 0, false)
 }
 
 func (u *Events) MatchInIndef(pattern string, rect geom.Rectangle) bool {
-	return u.match(pattern, rect, time.Duration(^uint64(0)>>1), time.Time{}, 0)
+	return u.match(pattern, rect, time.Duration(^uint64(0)>>1), time.Time{}, 0, false)
 }
 
 func (u *Events) MatchInFreshness(pattern string, rect geom.Rectangle, freshness time.Duration) bool {
-	return u.match(pattern, rect, time.Duration(^uint64(0)>>1), u.Now.Add(-freshness), 0)
+	return u.match(pattern, rect, time.Duration(^uint64(0)>>1), u.Now.Add(-freshness), 0, false)
 }
 
 func (u *Events) MatchInDuration(pattern string, rect geom.Rectangle, duration time.Duration) bool {
-	return u.match(pattern, rect, duration, time.Time{}, 0)
+	return u.match(pattern, rect, duration, time.Time{}, 0, false)
 }
 
 func (u *Events) MatchFreshness(pattern string, freshness time.Duration) bool {
-	return u.match(pattern, geom.Rect(-99999, -99999, 99999, 99999), time.Duration(^uint64(0)>>1), u.Now.Add(-freshness), 0)
+	return u.match(pattern, geom.Rect(-99999, -99999, 99999, 99999), time.Duration(^uint64(0)>>1), u.Now.Add(-freshness), 0, false)
 }
 
 func (u *Events) MatchDeadline(pattern string, deadline time.Time) bool {
-	return u.match(pattern, geom.Rect(-99999, -99999, 99999, 99999), time.Duration(^uint64(0)>>1), deadline, 0)
+	return u.match(pattern, geom.Rect(-99999, -99999, 99999, 99999), time.Duration(^uint64(0)>>1), deadline, 0, false)
 }
 
 func (u *Events) MatchInDeadline(pattern string, rect geom.Rectangle, deadline time.Time) bool {
-	return u.match(pattern, rect, time.Duration(^uint64(0)>>1), deadline, 0)
+	return u.match(pattern, rect, time.Duration(^uint64(0)>>1), deadline, 0, false)
 }
 
-func (u *Events) match(pattern string, rect geom.Rectangle, dur time.Duration, deadline time.Time, z int) bool {
+func (u *Events) match(pattern string, rect geom.Rectangle, dur time.Duration, deadline time.Time, z int, alwaysin bool) bool {
 	u.MatchCount++
 	r, ok := u.regexps[pattern]
 	if !ok {
@@ -301,7 +309,7 @@ func (u *Events) match(pattern string, rect geom.Rectangle, dur time.Duration, d
 		u.regexps[pattern] = r
 	}
 
-	ok, last := rinterp(r, u.Trace, rect, dur, deadline, z)
+	ok, last := rinterp(r, u.Trace, rect, dur, deadline, z, alwaysin)
 
 	if ok {
 		u.Last = last
