@@ -1074,7 +1074,7 @@ func sequencedivider(wo *World, c *Sorm, h bool) {
 		beginaxis(k)
 		if k.tag == 0 {
 			c.props.X = max(c.props.X, k.eprops.X)
-			c.props.Y += k.props.Y
+			c.props.Y += k.eprops.Y
 		} else {
 			k.eprops = geom.Pt(-min(0, k.W), -min(0, k.H))
 			if k.W >= 0 {
