@@ -2,14 +2,12 @@
 //
 // A good user interface framework must be an engine for a word processing game.
 //
-// Cleanup TODO:
-//	- Remove all X and rename all X2 to X.
-//	- Remove Canvas2: accept Geom as an argument to painting func
-//
 // TODO:
 //	- Round shape sizes inside aligners.
 //		- Noround modifier
 //		? Smooth rounding — don't round if in motion
+//		- Probably when implementing this will be the best time to go for
+//			geom.Rect for storing xywh
 //	? LimitOverride
 //	- Grid aligner
 //		- wo.Hgrid(cols int) + wo.Halign() — secondary alignment
@@ -180,6 +178,8 @@ const (
 	flagSequenceMark
 	flagSequenceSaved
 	flagBreakIteration
+	flagNegativeOvrx
+	flagNegativeOvry
 )
 
 //go:generate stringer -type=tagkind -trimprefix=tag
@@ -228,7 +228,7 @@ const (
 	tagScissor
 	tagHshrink
 	tagVshrink
-	tagLimit
+	tagLimit // Limit must be executed after update of a matrix, but before aligners, because it influences size.
 	tagVfollow
 	tagHfollow
 )
@@ -276,12 +276,12 @@ func init() {
 
 	preActions[-100-tagTransform] = transformrun
 	preActions[-100-tagPretransform] = pretransformrun
-	preActions[-100-tagLimit] = limitrun
 	preActions[-100-tagScissor] = scissorrun
 	preActions[-100-tagVfollow] = vfollowrun
 	preActions[-100-tagHfollow] = hfollowrun
 	preActions[-100-tagHshrink] = hshrinkrun
 	preActions[-100-tagVshrink] = vshrinkrun
+	preActions[-100-tagLimit] = limitrun
 
 	alignerActions[alignerNone] = noaligner
 	alignerActions[alignerVfollow] = vfollowaligner
@@ -342,15 +342,15 @@ type World struct {
 }
 
 type Sorm struct {
-	z, z2, i     int
-	tag          tagkind
-	flags        flagval
-	W, H, wl, hl float64
-	addw, addh   float64
-	r, x, y      float64
-	m, prem      geom.Geom
-	aligner      alignerkind
-	known, props geom.Point
+	z, z2, i             int
+	tag                  tagkind
+	flags                flagval
+	W, H, wl, hl         float64
+	addw, addh           float64
+	r, x, y              float64
+	m, prem              geom.Geom
+	aligner              alignerkind
+	known, props, eprops geom.Point
 	kidsl, kidsr,
 	modsl, modsr,
 	presl, presr int
@@ -363,7 +363,7 @@ type Sorm struct {
 
 	fill    nanovgo.Paint
 	stroke  nanovgo.Paint
-	strokew float32 // TODO
+	strokew float32
 
 	fontid  int
 	vecfont *Font
@@ -774,7 +774,6 @@ func valignrun(wo *World, c, m *Sorm) {
 	c.H = max(c.H, y)
 	c.kidsiter(wo, func(k *Sorm) {
 		k.y += (y - k.H) * m.W
-		// c.w = max(c.w, k.w)
 	})
 }
 
@@ -954,13 +953,13 @@ func limitrun(wo *World, s, m *Sorm) {
 		m.W = p.X
 		s.wl = min(s.wl, m.W)
 	} else if m.W < 0 {
-		s.W = m.W
+		s.eprops.X = -m.W
 	}
 	if m.H > 0 {
 		m.H = p.Y
 		s.hl = min(s.hl, m.H)
 	} else if m.H < 0 {
-		s.H = m.H
+		s.eprops.Y = -m.H
 	}
 }
 
@@ -1051,10 +1050,21 @@ func axis(h bool) (begin, end func(k *Sorm)) {
 			k.x, k.y = k.y, k.x
 			k.wl, k.hl = k.hl, k.wl
 			k.props.X, k.props.Y = k.props.Y, k.props.X
+			k.eprops.X, k.eprops.Y = k.eprops.Y, k.eprops.X
 			k.known.X, k.known.Y = k.known.Y, k.known.X
 		}
 	}
 	return swap, swap
+}
+
+func trypos(p, a geom.Point) geom.Point {
+	if p.X == 0 {
+		p.X = a.X
+	}
+	if p.Y == 0 {
+		p.Y = a.Y
+	}
+	return p
 }
 
 func sequencedivider(wo *World, c *Sorm, h bool) {
@@ -1063,28 +1073,25 @@ func sequencedivider(wo *World, c *Sorm, h bool) {
 	c.kidsiter(wo, func(k *Sorm) {
 		beginaxis(k)
 		if k.tag == 0 {
-			// beginprops(k)
-			c.props.X = max(c.props.X, k.props.X)
+			c.props.X = max(c.props.X, k.eprops.X)
 			c.props.Y += k.props.Y
-			// endprops(k)
-			goto end
-		}
-		if k.W >= 0 {
-			c.known.X = max(c.known.X, k.W)
 		} else {
-			c.props.X = max(c.props.X, -k.W)
+			k.eprops = geom.Pt(-min(0, k.W), -min(0, k.H))
+			if k.W >= 0 {
+				c.known.X = max(c.known.X, k.W)
+			} else {
+				c.props.X = max(c.props.X, -k.W)
+			}
+			if k.H >= 0 {
+				c.known.Y += k.H
+			} else {
+				c.props.Y += -k.H
+			}
 		}
-		if k.H >= 0 {
-			c.known.Y += k.H
-		} else {
-			c.props.Y += -k.H
-		}
-		if k.tag != 0 {
-			k.props = geom.Pt(-min(0, k.W), -min(0, k.H))
-		}
-	end:
 		endaxis(k)
 	})
+	// Don't set if overriden by Limit with negative size.
+	c.eprops = trypos(c.eprops, c.props)
 	endaxis(c)
 }
 
@@ -1099,13 +1106,14 @@ func sequencealigner(wo *World, c *Sorm, h bool) {
 	c.kidsiter(wo, func(k *Sorm) {
 		beginaxis(k)
 		stretch := false
-		if k.props.Y > 0 {
-			k.H = max(0, (c.hl-c.known.Y)/c.props.Y*k.props.Y) // Don't stretch if we're out of limit.
+		if k.eprops.Y > 0 {
+			// max() means we don't stretch if we're out of limit.
+			k.H = max(0, (c.hl-c.known.Y)/c.props.Y*k.eprops.Y)
 			k.hl = k.H
 			stretch = true
 		}
-		if k.props.X > 0 {
-			k.W = c.wl / c.props.X * k.props.X
+		if k.eprops.X > 0 {
+			k.W = c.wl / c.props.X * k.eprops.X
 			k.wl = k.W
 			stretch = true
 		}
@@ -1131,13 +1139,13 @@ func (wo *World) apply(_ *Sorm, c *Sorm) {
 		return
 	}
 
-	// Limit must be executed after update of a matrix, because it influences size.
-	slices.SortFunc(c.pres(wo), func(a, b Sorm) int {
-		return int(b.tag - a.tag)
-	})
+	// apply presumes that premodifiers are already sorted.
 	for _, m := range c.pres(wo) {
 		// A loop in (*World).resolvealigners is idemponent to this one
 		// in the case of tagVfollow and tagHfollow.
+		if m.tag == tagLimit && (m.W < 0 || m.H < 0) {
+			continue
+		}
 		preActions[-100-m.tag](wo, c, &m)
 	}
 
@@ -1372,8 +1380,15 @@ func (wo *World) resolvealigners(_ *Sorm, c *Sorm) {
 	if c.tag != 0 {
 		return
 	}
+	// Premodifiers have order of execution.
+	slices.SortFunc(c.pres(wo), func(a, b Sorm) int {
+		return int(b.tag - a.tag)
+	})
 	// A premodifier loop in (*World).apply is idemponent to this one.
 	for _, m := range c.pres(wo) {
+		if m.tag == tagLimit && (m.W < 0 || m.H < 0) {
+			preActions[-100-m.tag](wo, c, &m)
+		}
 		if oneof(m.tag, tagVfollow, tagHfollow) {
 			preActions[-100-m.tag](wo, c, &m)
 		}
@@ -1572,7 +1587,7 @@ func (wo *World) Develop() {
 		if s.tag == tagSequence {
 			// At this moment every shape inside a sequence is cached,
 			// just read it directly.
-			// TODO This approach can be extended ad infimum to support nested sequences.
+			// TODO This approach can be extended with recursion and a list of auxpools to support nested sequences.
 			pool := wo.auxpool[s.kidsl:s.kidsr]
 			for _, s := range pool {
 				if s.tag <= 0 {
@@ -1639,12 +1654,6 @@ func (wo *World) Develop() {
 	wo.auxn = 0
 
 	wo.sinks = wo.sinks[:1]
-
-	// z := wo.Trace[0]
-	// if wo.MatchInNochoke(`Click(1):in`, geom.Rect(-11111, -11111, 11111, 11111)) {
-	// 	wo.Trace[0] = z
-	// 	println(collect(wo.Events.Trace, func(p EventPoint) int { return p.z }))
-	// }
 
 	wo.Events.develop()
 	wo.windowDevelop()

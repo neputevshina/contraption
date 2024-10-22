@@ -183,24 +183,26 @@ func (wo *World) Examples() Sorm {
 					wo.Stroke(dark),
 					wo.Limit(100, 100),
 					wo.Compound(
+						wo.Valign(1),
 						wo.Hfollow(),
 						wo.Rectangle(-1, -1),
 						wo.Rectangle(-2, -1),
 						wo.Compound(
 							wo.Vfollow(),
 							wo.Rectangle(-1, -1),
-							wo.Rectangle(-1, -1),
-							wo.Rectangle(-1, -1),
-						),
+							wo.Compound(
+								wo.Hfollow(),
+								wo.Rectangle(-1, -1),
+								wo.Rectangle(-1, -1),
+							),
+							wo.Rectangle(-2, -1),
+							wo.Rectangle(-1, -1)),
 						wo.Rectangle(-2, -2),
 						wo.Compound(
 							wo.Hfollow(),
+							wo.Limit(-1, -4),
 							wo.Rectangle(-1, -1),
-							wo.Rectangle(-1, -1),
-							wo.Rectangle(-1, -1),
-							wo.Rectangle(-1, -1),
-						),
-					))
+							wo.Rectangle(-1, -1))))
 			}),
 			wo.Example(`Sliders`, func() Sorm {
 				return wo.Compound(
