@@ -437,10 +437,12 @@ out:
 				// Treat the aux pool as a main pool and a sequence as a root compound.
 				pop := wo.beginvirtual()
 				wo.prefix = k.z
-				for i := 0; i < q.Length(wo); i++ {
-					t := q.Get(wo, i)
-					args[i] = t
-				}
+				q.Get(wo, i, args[:])
+				// TODO
+				// var buf [1024]Sorm
+				// for i := 0; i < q.Length(wo); i++ {
+				//
+				// }
 				wo.prefix = 0
 				wo.endvirtual(pop)
 
