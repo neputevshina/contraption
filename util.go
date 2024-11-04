@@ -433,3 +433,11 @@ func oneof[T comparable](a T, as ...T) bool {
 	}
 	return false
 }
+
+func zeroandclear[T any](pool *[]T) {
+	var z T
+	for i := range *pool {
+		(*pool)[i] = z
+	}
+	(*pool) = (*pool)[:0]
+}

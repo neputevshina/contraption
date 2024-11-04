@@ -3,9 +3,38 @@
 // A good user interface framework must be an engine for a word processing game.
 //
 // TODO:
+//	- Investigate better ways to specify size values
+//		- Current: -1+20i — complex128, + concrete, - stretch, imaginary adds concrete change to stretchy
+//			+ Almost transparent
+//			+ Looks very good for static values
+//			~ Simple
+//			- Variable stretch is done through complex() constructor
+//			- Arithmetic is static only
+//		- Strings: "200", "1s+20px"
+//			+ Most powerful
+//			+ Can implement deferred arithmetics
+//				+ 1dp+8cm-20%/1s
+//			+ Can be extendable by user
+//			+ Parsing can be quite fast if done right
+//			- Construction from variables requires strconv
+//		- [N]int
+//			+ Easily extendable
+//			- Looks gross and is not ergonomical
+//		- Builders: St(1).Add(Px(20))
+//			+ Powerful
+//			+ Can implement deferred arithmetics
+//				+ Dp(1).Add(Cm(8)).Sub(Percent(20)).Div(St(1))
+//			- Less readable
+//		- Add another two values to every Sorm constructor
+//			- Requires major refactoring
+//			- Looks overcomplicated
+//	- Sequence buffer size hints
+//		- 16 elements on complex and large items
+//		- 128 on moderately complex and medium-sized items (messages in chat)
+//		- 1024 on small and simple elements (rows of data, histograms)
 //	- Round shape sizes inside aligners.
 //		- Noround modifier
-//		? Smooth rounding — don't round if in motion
+//		? Smooth rounding hint — don't round if in motion
 //		- Probably when implementing this will be the best time to go for
 //			geom.Rect for storing xywh
 //	? LimitOverride
@@ -180,6 +209,8 @@ const (
 	flagBreakIteration
 	flagNegativeOvrx
 	flagNegativeOvry
+	flagIteratedNotScissor
+	flagIteratedScissor
 )
 
 //go:generate stringer -type=tagkind -trimprefix=tag
@@ -339,18 +370,21 @@ type World struct {
 	f1           bool
 
 	alloc func(n int) (left, right int)
+
+	scissored  []*Sorm
+	scissoring bool
 }
 
 type Sorm struct {
-	z, z2, i             int
-	tag                  tagkind
-	flags                flagval
-	W, H, wl, hl         float64
-	addw, addh           float64
-	r, x, y              float64
-	m, prem              geom.Geom
-	aligner              alignerkind
-	known, props, eprops geom.Point
+	z, z2, i              int
+	tag                   tagkind
+	flags                 flagval
+	W, H, wl, hl          float64
+	addw, addh            float64
+	r, x, y               float64
+	m, prem               geom.Geom
+	aligner               alignerkind
+	knowns, props, eprops geom.Point
 	kidsl, kidsr,
 	modsl, modsr,
 	presl, presr int
@@ -399,81 +433,6 @@ func (s Sorm) auxkids(wo *World) []Sorm {
 
 func (s Sorm) kids2(wo *World) []Sorm {
 	return wo.pool[s.kidsl:s.kidsr]
-}
-
-func (wo *World) beginvirtual() (pool []Sorm) {
-	if sameslice(wo.pool, wo.auxpool) {
-		panic(`contraption: nested Sequences are not allowwed`)
-	}
-	pool = wo.pool
-	wo.pool = wo.auxpool
-	wo.nextn, wo.auxn = wo.auxn, wo.nextn
-	return
-}
-
-func (wo *World) endvirtual(pool []Sorm) {
-	wo.auxpool = wo.pool
-	wo.pool = pool
-	wo.nextn, wo.auxn = wo.auxn, wo.nextn
-}
-
-func (s Sorm) kidsiter(wo *World, f func(*Sorm)) {
-	// TODO Idea: take a limit in kidsiter, and if it is scissored, stop iteration when over it.
-	// It should work since scissored compounds can't stretch kids.
-	if s.tag == tagSequence {
-		return
-	}
-	kids := wo.pool[s.kidsl:s.kidsr]
-out:
-	for i := range kids {
-		k := &kids[i]
-
-		q, ok := k.key.(Sequence)
-		if ok {
-			if k.flags&flagSequenceSaved == 0 {
-				args := wo.tmpalloc(q.Length(wo))
-				reall := len(wo.auxpool)
-
-				// Treat the aux pool as a main pool and a sequence as a root compound.
-				pop := wo.beginvirtual()
-				wo.prefix = k.z
-				q.Get(wo, i, args[:])
-				// TODO
-				// var buf [1024]Sorm
-				// for i := 0; i < q.Length(wo); i++ {
-				//
-				// }
-				wo.prefix = 0
-				wo.endvirtual(pop)
-
-				// Copy the elements materialized from sequence to the aux pool,
-				// treat them like arguments of (*World).Compound
-				l, r := wo.allocaux(q.Length(wo))
-				copy(wo.auxpool[l:r], args)
-				k.kidsl = reall
-				k.kidsr = r
-				// Save immediate kids.
-				k.presl = l
-				k.presr = r
-				k.flags |= flagSequenceSaved
-			}
-			aux := wo.auxpool[k.presl:k.presr]
-			for i := range aux {
-				k := &aux[i]
-				pop := wo.beginvirtual()
-				f(k) // (1)
-				wo.endvirtual(pop)
-				if k.flags&flagBreakIteration > 0 { // (2)
-					break out
-				}
-			}
-		} else {
-			f(k)                                // (1)
-			if k.flags&flagBreakIteration > 0 { // (2)
-				break out
-			}
-		}
-	}
 }
 
 func (s Sorm) mods(wo *World) []Sorm {
@@ -752,11 +711,11 @@ func (wo *World) Halign(amt float64) (s Sorm) {
 }
 func halignrun(wo *World, c, m *Sorm) {
 	x := 0.0
-	c.kidsiter(wo, func(k *Sorm) {
+	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
 		x = max(x, k.W)
 	})
 	c.W = max(c.W, x)
-	c.kidsiter(wo, func(k *Sorm) {
+	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
 		k.x += (x - k.W) * m.W
 		// c.h = max(c.h, k.h)
 	})
@@ -770,11 +729,11 @@ func (wo *World) Valign(amt float64) (s Sorm) {
 }
 func valignrun(wo *World, c, m *Sorm) {
 	y := 0.0
-	c.kidsiter(wo, func(k *Sorm) {
+	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
 		y = max(y, k.H)
 	})
 	c.H = max(c.H, y)
-	c.kidsiter(wo, func(k *Sorm) {
+	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
 		k.y += (y - k.H) * m.W
 	})
 }
@@ -786,7 +745,7 @@ func (wo *World) Fill(p nanovgo.Paint) (s Sorm) {
 	return
 }
 func fillrun(wo *World, s, m *Sorm) {
-	s.kidsiter(wo, func(k *Sorm) {
+	s.kidsiter(wo, kiargs{}, func(k *Sorm) {
 		if k.tag >= 0 {
 			k.fill = m.fill
 		}
@@ -800,7 +759,7 @@ func (wo *World) Stroke(p nanovgo.Paint) (s Sorm) {
 	return
 }
 func strokerun(wo *World, s, m *Sorm) {
-	s.kidsiter(wo, func(k *Sorm) {
+	s.kidsiter(wo, kiargs{}, func(k *Sorm) {
 		if k.tag >= 0 {
 			k.stroke = m.stroke
 		}
@@ -815,7 +774,7 @@ func (wo *World) Strokewidth(w float64) (s Sorm) {
 }
 func strokewidthrun(wo *World, s, m *Sorm) {
 	s.flags |= flagSetStrokewidth
-	s.kidsiter(wo, func(k *Sorm) {
+	s.kidsiter(wo, kiargs{}, func(k *Sorm) {
 		if k.tag >= 0 {
 			k.strokew = m.strokew
 		}
@@ -965,9 +924,9 @@ func limitrun(wo *World, s, m *Sorm) {
 	}
 }
 
-// Transform applies transformation that only affects objects visually.
+// Posttransform applies transformation that only affects objects visually.
 // It doesn't affect object sizes for layout.
-func (wo *World) Transform(x, y float64) (s Sorm) {
+func (wo *World) Posttransform(x, y float64) (s Sorm) {
 	s = wo.newSorm()
 	s.tag = tagTransform
 	s.W = x
@@ -980,8 +939,8 @@ func transformrun(wo *World, c, m *Sorm) {
 	// Because moves are inherited in a separate pass
 }
 
-// Pretransform applies transformation that affects objects sizes for layout.
-func (wo *World) Pretransform(m geom.Geom) (s Sorm) {
+// Transform applies transformation that affects objects sizes for layout.
+func (wo *World) Transform(m geom.Geom) (s Sorm) {
 	s = wo.newSorm()
 	s.tag = tagPretransform
 	s.m = m
@@ -991,217 +950,6 @@ func pretransformrun(wo *World, c, m *Sorm) {
 	c.m = c.m.Mul(m.m)
 	// c.sx *= m.W
 	// c.sy *= m.H
-}
-
-// If a Compound has no aligner set (“stack” layout)
-func noaligner(wo *World, c *Sorm) {
-	minp := Point{}
-	c.kidsiter(wo, func(k *Sorm) {
-		c.W = max(c.W, k.W)
-		c.H = max(c.H, k.H)
-		if k.W < 0 {
-			minp.X = min(minp.X, k.W)
-		}
-		if k.H < 0 {
-			minp.Y = min(minp.Y, k.H)
-		}
-	})
-	if c.flags&flagHshrink > 0 {
-		c.wl = c.W
-	}
-	if c.flags&flagVshrink > 0 {
-		c.hl = c.H
-	}
-	c.kidsiter(wo, func(k *Sorm) {
-		stretch := false
-		if k.W < 0 {
-			k.W = c.wl * k.W / minp.X
-			k.W += k.addw
-			stretch = true
-		}
-		if k.H < 0 {
-			k.H = c.hl * k.H / minp.Y
-			k.H += k.addh
-			stretch = true
-		}
-		if stretch {
-			k.hl = k.H
-			k.wl = k.W
-			wo.apply(c, k)
-		}
-	})
-	c.kidsiter(wo, func(k *Sorm) {
-		c.W = max(c.W, k.W)
-		c.H = max(c.H, k.H)
-	})
-}
-
-func vfollowaligner(wo *World, c *Sorm) {
-	sequencealigner(wo, c, false)
-}
-
-func hfollowaligner(wo *World, c *Sorm) {
-	sequencealigner(wo, c, true)
-}
-
-func axis(h bool) (begin, end func(k *Sorm)) {
-	swap := func(k *Sorm) {
-		if h {
-			// Y is main axis, X is secondary.
-			k.W, k.H = k.H, k.W
-			k.x, k.y = k.y, k.x
-			k.wl, k.hl = k.hl, k.wl
-			k.props.X, k.props.Y = k.props.Y, k.props.X
-			k.eprops.X, k.eprops.Y = k.eprops.Y, k.eprops.X
-			k.known.X, k.known.Y = k.known.Y, k.known.X
-		}
-	}
-	return swap, swap
-}
-
-func trypos(p, a geom.Point) geom.Point {
-	if p.X == 0 {
-		p.X = a.X
-	}
-	if p.Y == 0 {
-		p.Y = a.Y
-	}
-	return p
-}
-
-func sequencedivider(wo *World, c *Sorm, h bool) {
-	beginaxis, endaxis := axis(h)
-	beginaxis(c)
-	c.kidsiter(wo, func(k *Sorm) {
-		beginaxis(k)
-		if k.tag == 0 {
-			c.props.X = max(c.props.X, k.eprops.X)
-			c.props.Y += k.eprops.Y
-		} else {
-			k.eprops = geom.Pt(-min(0, k.W), -min(0, k.H))
-			if k.W >= 0 {
-				c.known.X = max(c.known.X, k.W)
-			} else {
-				c.props.X = max(c.props.X, -k.W)
-			}
-			if k.H >= 0 {
-				c.known.Y += k.H
-			} else {
-				c.props.Y += -k.H
-			}
-		}
-		endaxis(k)
-	})
-	// Don't set if overriden by Limit with negative size.
-	c.eprops = trypos(c.eprops, c.props)
-	endaxis(c)
-}
-
-func sequencealigner(wo *World, c *Sorm, h bool) {
-	c.W, c.H = 0, 0
-	beginaxis, endaxis := axis(h)
-
-	// Calculate unknowns and apply kids which sizes were unknown,
-	// lay out the sequence then.
-	y := 0.0
-	beginaxis(c)
-	c.kidsiter(wo, func(k *Sorm) {
-		beginaxis(k)
-		stretch := false
-		if k.eprops.Y > 0 {
-			// max() means we don't stretch if we're out of limit.
-			k.H = max(0, (c.hl-c.known.Y)/c.props.Y*k.eprops.Y)
-			k.hl = k.H
-			stretch = true
-		}
-		if k.eprops.X > 0 {
-			k.W = c.wl / c.props.X * k.eprops.X
-			k.wl = k.W
-			stretch = true
-		}
-		endaxis(k)
-
-		if stretch {
-			wo.apply(c, k)
-		}
-
-		beginaxis(k)
-		k.y = y
-		y += k.H
-		c.W = max(c.W, k.W)
-		endaxis(k)
-	})
-	c.H = y
-	endaxis(c)
-}
-
-func (wo *World) apply(_ *Sorm, c *Sorm) {
-	// Apply is called on every shape, so ignore anything that is not Compound.
-	if c.tag != 0 {
-		return
-	}
-
-	// apply presumes that premodifiers are already sorted.
-	for _, m := range c.pres(wo) {
-		// A loop in (*World).resolvealigners is idemponent to this one
-		// in the case of tagVfollow and tagHfollow.
-		if m.tag == tagLimit && (m.W < 0 || m.H < 0) {
-			continue
-		}
-		preActions[-100-m.tag](wo, c, &m)
-	}
-
-	// Set scissor to limit if needed.
-	if c.flags&flagScissor > 0 {
-		c.scissor = geom.Rect(0, 0, c.wl, c.hl)
-	}
-	c.kidsiter(wo, func(k *Sorm) {
-		// NOTE Aligner is called after these assignments.
-		// 	So this can't influence limits at later stages.
-		k.wl = c.wl
-		k.hl = c.hl
-		// Inherit scissors and apply scale to them.
-		k.scissor = c.scissor
-
-		// Apply scale.
-		ns := k.m.ApplyPt(geom.Pt(k.W, k.H))
-		ims := k.m.ApplyPt(geom.Pt(k.addw, k.addh))
-		// Don't scale stretch coefficients.
-		k.W = cond(k.W >= 0, ns.X, k.W)
-		k.H = cond(k.H >= 0, ns.Y, k.H)
-		// But scale imaginaries.
-		k.addw = ims.X
-		k.addh = ims.Y
-
-		// Process only kids which sizes are known first.
-		if k.W >= 0 && k.H >= 0 {
-			wo.apply(c, k)
-		}
-	})
-
-	alignerActions[c.aligner](wo, c)
-
-	// Apply postorder/anyorder modifiers.
-	for _, m := range c.mods(wo) {
-		modActions[-m.tag](wo, c, &m)
-	}
-
-	c.kidsiter(wo, func(k *Sorm) {
-		// Apply size override to c if it has one.
-		if k.flags&flagOvrx > 0 {
-			c.W = k.W
-			c.x = min(c.x, -k.x)
-		}
-		if k.flags&flagOvry > 0 {
-			c.H = k.H
-			c.y = min(c.y, -k.y)
-		}
-	})
-
-	if c.flags&flagScissor > 0 {
-		c.W = min(c.W, c.wl)
-		c.H = min(c.H, c.hl)
-	}
 }
 
 type labelt struct {
@@ -1378,7 +1126,317 @@ func (wo *World) Next() bool {
 	return true
 }
 
-func (wo *World) resolvealigners(_ *Sorm, c *Sorm) {
+func (wo *World) beginvirtual() (pool []Sorm) {
+	if sameslice(wo.pool, wo.auxpool) {
+		panic(`contraption: nested Sequences are not allowwed`)
+	}
+	pool = wo.pool
+	wo.pool = wo.auxpool
+	wo.nextn, wo.auxn = wo.auxn, wo.nextn
+	return
+}
+
+func (wo *World) endvirtual(pool []Sorm) {
+	wo.auxpool = wo.pool
+	wo.pool = pool
+	wo.nextn, wo.auxn = wo.auxn, wo.nextn
+}
+
+type kiargs struct {
+	i              Index
+	a              alignerkind
+	notscissormark bool
+}
+
+func (s *Sorm) kidsiter(wo *World, a kiargs, f func(*Sorm)) {
+	// TODO Idea: take a limit in kidsiter, and if it is scissored, stop iteration when over it.
+	// It should work since scissored compounds can't stretch kids.
+	if s.tag == tagSequence {
+		return
+	}
+
+	// mode := func(k *Sorm) bool {
+	// 	if !wo.scissoring && k.flags&flagIteratedScissor == 0 {
+	// 		k.flags |= flagIteratedNotScissor
+	// 		return true
+	// 	}
+	// 	if wo.scissoring && k.flags&flagIteratedNotScissor == 0 {
+	// 		k.flags |= flagIteratedScissor
+	// 		return true
+	// 	}
+	// 	return false
+	// }
+
+	kids := wo.pool[s.kidsl:s.kidsr]
+out:
+	for i := range kids {
+		k := &kids[i]
+
+		q, ok := k.key.(Sequence)
+		if ok {
+			if k.flags&flagSequenceSaved == 0 {
+				args := wo.tmpalloc(q.Length(wo))
+				reall := len(wo.auxpool)
+
+				// Treat the aux pool as a main pool and a sequence as a root compound.
+				pop := wo.beginvirtual()
+				wo.prefix = k.z
+				q.Get(wo, i, args[:])
+				// TODO Call (*World).layout on every scissored compound right here.
+				// TODO
+				// var buf [1024]Sorm
+				// for i := 0; i < q.Length(wo); i++ {
+				//
+				// }
+				wo.prefix = 0
+				wo.endvirtual(pop)
+
+				// Copy the elements materialized from sequence to the aux pool,
+				// treat them like arguments of (*World).Compound
+				l, r := wo.allocaux(q.Length(wo))
+				copy(wo.auxpool[l:r], args)
+				k.kidsl = reall
+				k.kidsr = r
+				// Save immediate kids.
+				k.presl = l
+				k.presr = r
+				k.flags |= flagSequenceSaved
+			}
+			aux := wo.auxpool[k.presl:k.presr]
+			for i := range aux {
+				k := &aux[i]
+				pop := wo.beginvirtual()
+				f(k) // (1)
+				wo.endvirtual(pop)
+				if a.notscissormark { // (3)
+					k.flags |= flagIteratedNotScissor
+				}
+				if k.flags&flagBreakIteration > 0 { // (2)
+					break out
+				}
+			}
+		} else {
+			f(k)                  // (1)
+			if a.notscissormark { // (3)
+				k.flags |= flagIteratedNotScissor
+			}
+			if k.flags&flagBreakIteration > 0 { // (2)
+				break out
+			}
+		}
+	}
+}
+
+// If a Compound has no aligner set (“stack” layout)
+func noaligner(wo *World, c *Sorm) {
+	minp := Point{}
+	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
+		c.W = max(c.W, k.W)
+		c.H = max(c.H, k.H)
+		if k.W < 0 {
+			minp.X = min(minp.X, k.W)
+		}
+		if k.H < 0 {
+			minp.Y = min(minp.Y, k.H)
+		}
+	})
+	if c.flags&flagHshrink > 0 {
+		c.wl = c.W
+	}
+	if c.flags&flagVshrink > 0 {
+		c.hl = c.H
+	}
+	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
+		stretch := false
+		if k.W < 0 {
+			k.W = c.wl * k.W / minp.X
+			k.W += k.addw
+			stretch = true
+		}
+		if k.H < 0 {
+			k.H = c.hl * k.H / minp.Y
+			k.H += k.addh
+			stretch = true
+		}
+		if stretch {
+			k.hl = k.H
+			k.wl = k.W
+			wo.apply(c, k)
+		}
+	})
+	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
+		c.W = max(c.W, k.W)
+		c.H = max(c.H, k.H)
+	})
+}
+
+func vfollowaligner(wo *World, c *Sorm) {
+	sequencealigner(wo, c, false)
+}
+
+func hfollowaligner(wo *World, c *Sorm) {
+	sequencealigner(wo, c, true)
+}
+
+func axis(h bool) (begin, end func(k *Sorm)) {
+	swap := func(k *Sorm) {
+		if h {
+			// Y is main axis, X is secondary.
+			k.W, k.H = k.H, k.W
+			k.x, k.y = k.y, k.x
+			k.wl, k.hl = k.hl, k.wl
+			k.props.X, k.props.Y = k.props.Y, k.props.X
+			k.eprops.X, k.eprops.Y = k.eprops.Y, k.eprops.X
+			k.knowns.X, k.knowns.Y = k.knowns.Y, k.knowns.X
+		}
+	}
+	return swap, swap
+}
+
+func trypos(p, a geom.Point) geom.Point {
+	if p.X == 0 {
+		p.X = a.X
+	}
+	if p.Y == 0 {
+		p.Y = a.Y
+	}
+	return p
+}
+
+func sequencedivider(wo *World, c *Sorm, h bool) {
+	beginaxis, endaxis := axis(h)
+	beginaxis(c)
+	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
+		beginaxis(k)
+		if k.tag == 0 {
+			c.props.X = max(c.props.X, k.eprops.X)
+			c.props.Y += k.eprops.Y
+		} else {
+			k.eprops = geom.Pt(-min(0, k.W), -min(0, k.H))
+			if k.W >= 0 {
+				c.knowns.X = max(c.knowns.X, k.W)
+			} else {
+				c.props.X = max(c.props.X, -k.W)
+			}
+			if k.H >= 0 {
+				c.knowns.Y += k.H
+			} else {
+				c.props.Y += -k.H
+			}
+		}
+		endaxis(k)
+	})
+	// Don't set if overriden by Limit with negative size.
+	c.eprops = trypos(c.eprops, c.props)
+	endaxis(c)
+}
+
+func sequencealigner(wo *World, c *Sorm, h bool) {
+	c.W, c.H = 0, 0
+	beginaxis, endaxis := axis(h)
+
+	// Calculate unknowns and apply kids which sizes were unknown,
+	// lay out the sequence then.
+	y := 0.0
+	beginaxis(c)
+	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
+		stretch := false
+
+		beginaxis(k)
+		if k.eprops.Y > 0 {
+			// max() means we don't stretch if we're out of limit.
+			k.H = max(0, (c.hl-c.knowns.Y)/c.props.Y*k.eprops.Y)
+			k.hl = k.H
+			stretch = true
+		}
+		if k.eprops.X > 0 {
+			k.W = c.wl / c.props.X * k.eprops.X
+			k.wl = k.W
+			stretch = true
+		}
+		endaxis(k)
+
+		if stretch {
+			wo.apply(c, k)
+		}
+
+		beginaxis(k)
+		k.y = y
+		y += k.H
+		c.W = max(c.W, k.W)
+		endaxis(k)
+	})
+	c.H = y
+	endaxis(c)
+}
+
+func (wo *World) apply(p *Sorm, c *Sorm) {
+	// Apply is called on every shape, so ignore anything that is not Compound.
+	if c.tag != 0 {
+		return
+	}
+
+	// apply presumes that premodifiers are already sorted.
+	for _, m := range c.pres(wo) {
+		if m.tag == tagLimit && (m.W >= 0 || m.H >= 0) {
+			preActions[-100-m.tag](wo, c, &m)
+		}
+	}
+
+	// Set scissor to limit if needed.
+	if c.flags&flagScissor > 0 {
+		c.scissor = geom.Rect(0, 0, c.wl, c.hl)
+	}
+	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
+		// NOTE Aligner is called after these assignments.
+		// 	So this can't influence limits at later stages.
+		k.wl = c.wl
+		k.hl = c.hl
+		// Inherit scissors and apply scale to them.
+		k.scissor = c.scissor
+
+		// Apply scale.
+		ns := k.m.ApplyPt(geom.Pt(k.W, k.H))
+		ims := k.m.ApplyPt(geom.Pt(k.addw, k.addh))
+		// Don't scale stretch coefficients.
+		k.W = cond(k.W >= 0, ns.X, k.W)
+		k.H = cond(k.H >= 0, ns.Y, k.H)
+		// But scale imaginaries.
+		k.addw = ims.X
+		k.addh = ims.Y
+
+		// Process only kids which sizes are known first.
+		if k.W >= 0 && k.H >= 0 {
+			wo.apply(c, k)
+		}
+	})
+
+	alignerActions[c.aligner](wo, c)
+
+	// Apply postorder/anyorder modifiers.
+	for _, m := range c.mods(wo) {
+		modActions[-m.tag](wo, c, &m)
+	}
+
+	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
+		// Apply size override to c if it has one.
+		if k.flags&flagOvrx > 0 {
+			c.W = k.W
+			c.x = min(c.x, -k.x)
+		}
+		if k.flags&flagOvry > 0 {
+			c.H = k.H
+			c.y = min(c.y, -k.y)
+		}
+	})
+
+	if c.flags&flagScissor > 0 {
+		c.W = min(c.W, c.wl)
+		c.H = min(c.H, c.hl)
+	}
+}
+
+func (wo *World) resolvepremods(_ *Sorm, c *Sorm) {
 	if c.tag != 0 {
 		return
 	}
@@ -1386,38 +1444,30 @@ func (wo *World) resolvealigners(_ *Sorm, c *Sorm) {
 	slices.SortFunc(c.pres(wo), func(a, b Sorm) int {
 		return int(b.tag - a.tag)
 	})
-	// A premodifier loop in (*World).apply is idemponent to this one.
+
 	for _, m := range c.pres(wo) {
-		if m.tag == tagLimit && (m.W < 0 || m.H < 0) {
-			preActions[-100-m.tag](wo, c, &m)
+		if m.tag == tagLimit && (m.W >= 0 || m.H >= 0) {
+			continue
 		}
-		if oneof(m.tag, tagVfollow, tagHfollow) {
-			preActions[-100-m.tag](wo, c, &m)
-		}
+		preActions[-100-m.tag](wo, c, &m)
 	}
-	c.kidsiter(wo, func(k *Sorm) {
-		wo.resolvealigners(c, k)
+
+	// Defer scissored compounds for another pass.
+	// println(c.flags&flagScissor > 0)
+	// if c.flags&flagScissor > 0 && !wo.scissoring {
+	// 	wo.scissored = append(wo.scissored, c)
+	// 	return
+	// }
+
+	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
+		wo.resolvepremods(c, k)
 	})
 }
 
-// Develop applies the layout and renders the next frame.
-// See package description for preferred use of Contraption.
-func (wo *World) Develop() {
-	vgo := wo.Vgo
-
-	vgo.ResetTransform()
-	root := &wo.pool[len(wo.pool)-1]
-	root.wl = wo.Wwin
-	root.hl = wo.Hwin
-
-	pool := wo.pool[0:wo.rend]
-
-	for i := range pool {
-		pool[i].i = i
-	}
-
-	// Resolve aligners and stack negative sizes.
-	wo.resolvealigners(nil, last(pool))
+func (wo *World) layout(pool []Sorm, root *Sorm) {
+	// Resolve premodifiers and stack negative sizes.
+	// println()
+	wo.resolvepremods(nil, root)
 	for i := 0; i < len(pool); i++ {
 		s := &pool[i]
 		if s.tag == tagSequence {
@@ -1450,12 +1500,12 @@ func (wo *World) Develop() {
 	}
 
 	// Do the layout.
-	wo.apply(nil, last(pool))
+	wo.apply(nil, root)
 
 	// Inherit moves and paints.
 	// TODO Maybe wo.apply should do it? Kind of makes more sense.
 	inh := func(c, efc *Sorm) {
-		c.kidsiter(wo, func(k *Sorm) {
+		c.kidsiter(wo, kiargs{}, func(k *Sorm) {
 			k.x += efc.x
 			k.y += efc.y
 			k.scissor = k.scissor.Add(geom.Pt(efc.x, efc.y))
@@ -1503,13 +1553,35 @@ func (wo *World) Develop() {
 		}
 		println()
 	}
+}
+
+// Develop applies the layout and renders the next frame.
+// See package description for preferred use of Contraption.
+func (wo *World) Develop() {
+	vgo := wo.Vgo
+
+	vgo.ResetTransform()
+	root := &wo.pool[len(wo.pool)-1]
+	root.wl = wo.Wwin
+	root.hl = wo.Hwin
+
+	pool := wo.pool[0:wo.rend]
+
+	for i := range pool {
+		pool[i].i = i
+	}
+
+	wo.layout(pool, last(pool))
+	for i := range wo.scissored {
+		wo.layout(pool, wo.scissored[i])
+	}
 
 	// Sort in draw order.
 	slices.SortFunc(pool, func(a, b Sorm) int {
 		return a.z - b.z
 	})
 
-	// Apply conditional paints.
+	// Apply conditional paints, match drag-and-drop events.
 	for i := len(pool) - 1; i >= 0; i-- {
 		s := &pool[i]
 		r := geom.Rect(s.x, s.y, s.x+s.W, s.y+s.H)
@@ -1642,18 +1714,13 @@ func (wo *World) Develop() {
 	// saved is to preserve keys.
 	wo.old, wo.pool = wo.pool, wo.old
 	wo.auxold, wo.auxpool = wo.auxpool, wo.auxold
-	zeroandclear := func(pool *[]Sorm) {
-		for i := range *pool {
-			(*pool)[i] = Sorm{}
-		}
-		(*pool) = (*pool)[:0]
-	}
 
 	zeroandclear(&wo.pool)
-	zeroandclear(&wo.auxpool)
-	zeroandclear(&wo.tmp)
 	wo.nextn = 0
+	zeroandclear(&wo.auxpool)
 	wo.auxn = 0
+	zeroandclear(&wo.tmp)
+	zeroandclear(&wo.scissored)
 
 	wo.sinks = wo.sinks[:1]
 
@@ -1738,7 +1805,7 @@ func sormp(wo *World, s Sorm, tab int) {
 	for _, s := range s.mods(wo) {
 		sormp(wo, s, tab+1)
 	}
-	s.kidsiter(wo, func(k *Sorm) {
+	s.kidsiter(wo, kiargs{}, func(k *Sorm) {
 		sormp(wo, *k, tab+1)
 	})
 }

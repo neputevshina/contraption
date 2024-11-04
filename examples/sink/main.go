@@ -14,7 +14,7 @@ import (
 type Sorm = contraption.Sorm
 type World struct {
 	*contraption.World
-	Text func(size float64, str []rune) Sorm
+	Text func(size float64, str string) Sorm
 }
 
 var (
@@ -38,9 +38,10 @@ func main() {
 	wo := World{
 		World: contraption.New(contraption.Config{}),
 	}
-	wo.Text = wo.NewVectorText(goregular.TTF)
-	f, _ := contraption.NewFont(nil, goregular.TTF, "")
-	println(f.Captoem(53))
+	wo.Text = wo.NewText(goregular.TTF)
+	// f, _ := contraption.NewFont(nil, goregular.TTF, "")
+	// println(f.Captoem(53))
+	// wo.Vgo.CreateFontFromMemory("asdf", goregular.TTF, 0)
 
 	for wo.Next() {
 		if wo.Match(`!Release(Ctrl)* Press(Ctrl)`) {
@@ -55,7 +56,7 @@ func main() {
 			}
 		}
 		wo.Root(
-			wo.Pretransform(geom.Scale2d(scale, scale)),
+			wo.Transform(geom.Scale2d(scale, scale)),
 			wo.Compound(
 				wo.Sequence(contraption.SliceSequence2(wo.Trace, func(i int) contraption.Sorm {
 					p := `#00000000`
@@ -364,7 +365,7 @@ func (wo *World) Slider(v *float64) Sorm {
 
 func (wo *World) Label(v ...any) Sorm {
 	// TODO wo.Text takes io.RuneReader, define and use SprintRuneReader
-	return wo.Text(10, []rune(fmt.Sprint(v...))).Fill(hexpaint(`#000000`))
+	return wo.Text(10, fmt.Sprint(v...)).Fill(hexpaint(`#000000`))
 }
 
 func (wo *World) Example(label string, ex func() Sorm) Sorm {

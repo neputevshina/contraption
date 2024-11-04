@@ -22,7 +22,6 @@ type Font struct {
 	Vgoid          int
 	Name           string
 
-	vgok       float64
 	capmap0    int
 	capmap     []int
 	segcache   map[rune][]Segment
@@ -51,16 +50,7 @@ func NewFont(vgo *nanovgo.Context, data []byte, name string) (*Font, error) {
 	if vgo != nil {
 		f3.Vgoid = vgo.CreateFontFromMemory(name, data, 0)
 	}
-	k := 1.0
-	if vgo != nil {
-		k = f3.getvgok(vgo)
-	}
-	f3.vgok = k
 	return f3, err
-}
-
-func (f *Font) getvgok(vgo *nanovgo.Context) float64 {
-	return float64(f.FreeTypeParsed.VMetric(72<<6, f.FreeTypeParsed.Index('H')).TopSideBearing) / (72 << 6)
 }
 
 func (f *Font) CaptoemFixed(cap fixed.Int26_6) fixed.Int26_6 {

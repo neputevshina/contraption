@@ -36,14 +36,17 @@ func (wo *World) generalNewText(font []byte, kind tagkind) func(size float64, st
 		s := wo.newSorm()
 		s.tag = kind
 		s.H = size
-		s.r = f.vgok * 1.42
+		// s.r = f.vgok * 1.42
 		s.vecfont = f
 		s.fontid = f.Vgoid
 		wo.Vgo.SetFontFaceID(s.fontid)
-		wo.Vgo.SetFontSize(float32(s.vecfont.Captoem(size) * s.r))
+		wo.Vgo.SetFontSize(float32(size))
 		_, abcd := wo.Vgo.TextBounds(0, 0, str)
 		_, space := wo.Vgo.TextBounds(0, 0, " ")
 		s.W = float64(abcd[2]-abcd[0]) - float64(space[2]-space[0])
+		if s.W < 0 {
+			s.W = 0
+		}
 		if kind == tagTopDownText || kind == tagBottomUpText {
 			s.W, s.H = s.H, s.W
 		}
@@ -64,7 +67,7 @@ func generaltextrun(kind tagkind) func(wo *World, s *Sorm) {
 		if horizontal {
 			// Adjust baseline so 0y0 is top left.
 			wo.Vgo.SetTransform(nanovgo.TranslateMatrix(float32(s.x), float32(s.y)+float32(s.H)))
-			wo.Vgo.SetFontSize(float32(s.vecfont.Captoem(s.H) * s.r))
+			wo.Vgo.SetFontSize(float32(s.H))
 		} else {
 			wo.Vgo.SetTransform(nanovgo.TranslateMatrix(float32(s.x), float32(s.y)))
 			if kind == tagTopDownText {
@@ -72,7 +75,7 @@ func generaltextrun(kind tagkind) func(wo *World, s *Sorm) {
 			} else if kind == tagBottomUpText {
 				wo.Vgo.SetTransform(nanovgo.RotateMatrix(-nanovgo.PI / 2))
 			}
-			wo.Vgo.SetFontSize(float32(s.vecfont.Captoem(s.W) * s.r))
+			wo.Vgo.SetFontSize(float32(s.W))
 		}
 		wo.Vgo.SetFontFaceID(s.fontid)
 		wo.Vgo.SetFillPaint(s.fill)

@@ -8,7 +8,7 @@ require (
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
 	github.com/h2non/filetype v1.1.3
 	github.com/neputevshina/geom v0.0.0-20230909172811-bde0896ea4a2
-	github.com/neputevshina/nanovgo v0.0.0-20240706035538-518f5d4a110c
+	github.com/neputevshina/nanovgo v0.0.0-20241104171014-8329a8bbb5cf
 	golang.design/x/clipboard v0.7.0
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d
 	golang.org/x/exp/shiny v0.0.0-20240506185415-9bf2ced13842
