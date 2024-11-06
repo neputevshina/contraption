@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"strconv"
 	"time"
@@ -9,7 +10,13 @@ import (
 	"github.com/neputevshina/contraption"
 	"github.com/neputevshina/geom"
 	"golang.org/x/image/font/gofont/goregular"
+
+	_ "embed"
 )
+
+//go:embed okcomputer.jpg
+var _okcomputer []byte
+var okcomputer = bytes.NewBuffer(_okcomputer)
 
 type Sorm = contraption.Sorm
 type World struct {
@@ -146,7 +153,7 @@ func (wo *World) Examples() Sorm {
 							wo.Rectangle(-1, -1).Fill(yellow),
 							wo.Label(`abc`))))
 			}),
-			wo.Example(`Align child's center to container's top`, func() Sorm {
+			wo.Example(`Align child's top to container's center`, func() Sorm {
 				return wo.Compound(
 					wo.Limit(100, 100),
 					wo.Compound(
@@ -268,8 +275,8 @@ func (wo *World) Examples() Sorm {
 			}),
 		),
 		wo.Compound(
-			wo.Vfollow(),
-			wo.BetweenVoid(0, 64),
+			wo.Hfollow(),
+			wo.BetweenVoid(64, 0),
 			wo.Example(`Scissor`, func() Sorm {
 				return wo.Compound(
 					wo.Limit(100, 100),
@@ -278,6 +285,13 @@ func (wo *World) Examples() Sorm {
 						wo.Vfollow(),
 						wo.Rectangle(100, 100).Fill(dark),
 						wo.Rectangle(100, 100).Fill(yellow)))
+			}),
+			wo.Example(`Illustration`, func() Sorm {
+				return wo.Compound(
+					wo.Limit(100, 100),
+					wo.Halign(1),
+					wo.Scissor(),
+					wo.Illustration(-1, -1, "zoom", okcomputer))
 			}),
 		))
 }

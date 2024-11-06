@@ -235,6 +235,7 @@ const (
 	tagTopDownText
 	tagBottomUpText
 	tagSequence
+	tagIllustration
 )
 const (
 	_ tagkind = -iota
@@ -254,8 +255,8 @@ const (
 )
 const (
 	_ tagkind = -100 - iota
+	tagPosttransform
 	tagTransform
-	tagPretransform
 	tagScissor
 	tagHshrink
 	tagVshrink
@@ -291,6 +292,7 @@ func init() {
 	shapeActions[tagTopDownText] = generaltextrun(tagTopDownText)
 	shapeActions[tagBottomUpText] = generaltextrun(tagBottomUpText)
 	shapeActions[tagSequence] = sequencerun
+	shapeActions[tagIllustration] = illustrationrun
 
 	modActions[-tagHalign] = halignrun
 	modActions[-tagValign] = valignrun
@@ -305,8 +307,8 @@ func init() {
 	modActions[-tagSource] = sourcerun
 	modActions[-tagSink] = sinkrun
 
+	preActions[-100-tagPosttransform] = posttransformrun
 	preActions[-100-tagTransform] = transformrun
-	preActions[-100-tagPretransform] = pretransformrun
 	preActions[-100-tagScissor] = scissorrun
 	preActions[-100-tagVfollow] = vfollowrun
 	preActions[-100-tagHfollow] = hfollowrun
@@ -328,6 +330,7 @@ type Equation interface {
 
 type World struct {
 	*Events
+	gen int
 
 	Window       Window
 	Oscilloscope Oscilloscope
@@ -373,18 +376,26 @@ type World struct {
 
 	scissored  []*Sorm
 	scissoring bool
+
+	images map[io.Reader]imagestruct
+}
+
+type imagestruct struct {
+	gen     int
+	texid   int
+	origsiz geom.Point
 }
 
 type Sorm struct {
 	z, z2, i              int
 	tag                   tagkind
 	flags                 flagval
-	W, H, wl, hl          float64
-	addw, addh            float64
+	Size, l, add          geom.Point
+	knowns, props, eprops geom.Point
+	ialign                geom.Point
 	r, x, y               float64
 	m, prem               geom.Geom
 	aligner               alignerkind
-	knowns, props, eprops geom.Point
 	kidsl, kidsr,
 	modsl, modsr,
 	presl, presr int
@@ -505,9 +516,9 @@ func (s Sorm) String() string {
 	}
 	var vals string
 	if s.tag < 0 {
-		vals = fmt.Sprint(f(s.W), ", ", f(s.H), ", ", f(s.x), ", ", f(s.y), ", _", f(s.wl), ", _", f(s.hl))
+		vals = fmt.Sprint(f(s.Size.X), ", ", f(s.Size.Y), ", ", f(s.x), ", ", f(s.y), ", _", f(s.l.X), ", _", f(s.l.Y))
 	} else {
-		vals = fmt.Sprint(f(s.W), "×", f(s.H), ", ", f(s.x), "y", f(s.y), ", ↓", f(s.wl), "×", f(s.hl), " ", color(p.innerColor))
+		vals = fmt.Sprint(f(s.Size.X), "×", f(s.Size.Y), ", ", f(s.x), "y", f(s.y), ", ↓", f(s.l.X), "×", f(s.l.Y), " ", color(p.innerColor))
 	}
 	key := cond(s.key != nil, fmt.Sprint(" [", s.key, "]"), "")
 	ovrx := cond(s.flags&flagOvrx > 0, "↑X", "  ")
@@ -537,9 +548,44 @@ func (s Sorm) String() string {
 func (s Sorm) decimate() Sorm {
 	s.x = math.Floor(s.x)
 	s.y = math.Floor(s.y)
-	s.W = math.Ceil(s.W)
-	s.H = math.Ceil(s.H)
+	s.Size.X = math.Ceil(s.Size.X)
+	s.Size.Y = math.Ceil(s.Size.Y)
 	return s
+}
+
+// BaseWorld returns itself.
+// This method allows to access base World class from user worlds.
+func (wo *World) BaseWorld() *World {
+	return wo
+}
+
+func (wo *World) newSorm() (s Sorm) {
+	wo.nextn++
+
+	s = Sorm{
+		z:    wo.nextn,
+		m:    geom.Identity2d(),
+		prem: geom.Identity2d(),
+	}
+	if wo.f1 {
+		_, s.callerfile, s.callerline, _ = runtime.Caller(2)
+	}
+	virtual := wo.prefix > 0
+	if virtual {
+		s.z = wo.prefix
+		s.z2 = wo.nextn
+		s.flags = flagSequenceMark
+	}
+	return
+}
+
+func (wo *World) Prevkey(key any) Sorm {
+	for _, z := range wo.old {
+		if z.tag == 0 && z.key == key {
+			return z
+		}
+	}
+	return Sorm{}
 }
 
 func (s Sorm) Fill(p nanovgo.Paint) Sorm {
@@ -613,76 +659,14 @@ func (s Sorm) Betweener() Sorm {
 	return s
 }
 
-func (s Sorm) Size(x, y float64) Sorm {
-	s.W = x
-	s.H = y
+func (s Sorm) Resize(x, y float64) Sorm {
+	s.Size.X = x
+	s.Size.Y = y
 	return s
 }
 
 func (s Sorm) Rectangle() geom.Rectangle {
-	return geom.Rect(s.x, s.y, s.x+s.W, s.y+s.H)
-}
-
-func (s Sorm) paint(wo *World, f func()) {
-	if s.fill != (nanovgo.Paint{}) || s.stroke != (nanovgo.Paint{}) {
-		wo.Vgo.BeginPath()
-	}
-	wo.Vgo.ResetTransform()
-	if s.fill != (nanovgo.Paint{}) {
-		wo.Vgo.SetFillPaint(s.fill)
-	}
-	if s.stroke != (nanovgo.Paint{}) {
-		wo.Vgo.SetStrokePaint(s.stroke)
-	}
-	f()
-	wo.Vgo.ClosePath()
-	if s.fill != (nanovgo.Paint{}) {
-		wo.Vgo.Fill()
-	}
-	if s.strokew != 0 {
-		wo.Vgo.SetStrokeWidth(s.strokew)
-	}
-	if s.stroke != (nanovgo.Paint{}) {
-		if s.fill != (nanovgo.Paint{}) {
-			wo.Vgo.Also()
-		}
-		wo.Vgo.Stroke()
-	}
-}
-
-// BaseWorld returns itself.
-// This method allows to access base World class from user worlds.
-func (wo *World) BaseWorld() *World {
-	return wo
-}
-
-func (wo *World) newSorm() (s Sorm) {
-	wo.nextn++
-
-	s = Sorm{
-		z:    wo.nextn,
-		m:    geom.Identity2d(),
-		prem: geom.Identity2d(),
-	}
-	if wo.f1 {
-		_, s.callerfile, s.callerline, _ = runtime.Caller(2)
-	}
-	virtual := wo.prefix > 0
-	if virtual {
-		s.z = wo.prefix
-		s.z2 = wo.nextn
-		s.flags = flagSequenceMark
-	}
-	return
-}
-
-func (wo *World) Prevkey(key any) Sorm {
-	for _, z := range wo.old {
-		if z.tag == 0 && z.key == key {
-			return z
-		}
-	}
-	return Sorm{}
+	return geom.Rect(s.x, s.y, s.x+s.Size.X, s.y+s.Size.Y)
 }
 
 func (wo *World) Vfollow() (s Sorm) {
@@ -706,35 +690,36 @@ func hfollowrun(wo *World, c, m *Sorm) {
 func (wo *World) Halign(amt float64) (s Sorm) {
 	s = wo.newSorm()
 	s.tag = tagHalign
-	s.W = clamp(0, amt, 1)
+	s.Size.X = clamp(0, amt, 1)
 	return
 }
 func halignrun(wo *World, c, m *Sorm) {
 	x := 0.0
 	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
-		x = max(x, k.W)
+		x = max(x, k.Size.X)
 	})
-	c.W = max(c.W, x)
+	c.Size.X = max(c.Size.X, x)
 	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
-		k.x += (x - k.W) * m.W
-		// c.h = max(c.h, k.h)
+		k.x += (x - k.Size.X) * m.Size.X
+		k.ialign.X = m.Size.X
 	})
 }
 
 func (wo *World) Valign(amt float64) (s Sorm) {
 	s = wo.newSorm()
 	s.tag = tagValign
-	s.W = clamp(0, amt, 1)
+	s.Size.X = clamp(0, amt, 1)
 	return
 }
 func valignrun(wo *World, c, m *Sorm) {
 	y := 0.0
 	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
-		y = max(y, k.H)
+		y = max(y, k.Size.Y)
 	})
-	c.H = max(c.H, y)
+	c.Size.Y = max(c.Size.Y, y)
 	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
-		k.y += (y - k.H) * m.W
+		k.y += (y - k.Size.Y) * m.Size.X
+		k.ialign.Y = m.Size.X
 	})
 }
 
@@ -905,22 +890,22 @@ func scissorrun(wo *World, s *Sorm, m *Sorm) {
 func (wo *World) Limit(w, h float64) (s Sorm) {
 	s = wo.newSorm()
 	s.tag = tagLimit
-	s.W, s.H = w, h
+	s.Size.X, s.Size.Y = w, h
 	return
 }
 func limitrun(wo *World, s, m *Sorm) {
-	p := s.m.ApplyPt(geom.Pt(m.W, m.H))
-	if m.W > 0 {
-		m.W = p.X
-		s.wl = min(s.wl, m.W)
-	} else if m.W < 0 {
-		s.eprops.X = -m.W
+	p := s.m.ApplyPt(geom.Pt(m.Size.X, m.Size.Y))
+	if m.Size.X > 0 {
+		m.Size.X = p.X
+		s.l.X = min(s.l.X, m.Size.X)
+	} else if m.Size.X < 0 {
+		s.eprops.X = -m.Size.X
 	}
-	if m.H > 0 {
-		m.H = p.Y
-		s.hl = min(s.hl, m.H)
-	} else if m.H < 0 {
-		s.eprops.Y = -m.H
+	if m.Size.Y > 0 {
+		m.Size.Y = p.Y
+		s.l.Y = min(s.l.Y, m.Size.Y)
+	} else if m.Size.Y < 0 {
+		s.eprops.Y = -m.Size.Y
 	}
 }
 
@@ -928,28 +913,28 @@ func limitrun(wo *World, s, m *Sorm) {
 // It doesn't affect object sizes for layout.
 func (wo *World) Posttransform(x, y float64) (s Sorm) {
 	s = wo.newSorm()
-	s.tag = tagTransform
-	s.W = x
-	s.H = y
+	s.tag = tagPosttransform
+	s.Size.X = x
+	s.Size.Y = y
 	return
 }
-func transformrun(wo *World, c, m *Sorm) {
-	c.x += m.W
-	c.y += m.H
+func posttransformrun(wo *World, c, m *Sorm) {
+	c.x += m.Size.X
+	c.y += m.Size.Y
 	// Because moves are inherited in a separate pass
 }
 
 // Transform applies transformation that affects objects sizes for layout.
 func (wo *World) Transform(m geom.Geom) (s Sorm) {
 	s = wo.newSorm()
-	s.tag = tagPretransform
+	s.tag = tagTransform
 	s.m = m
 	return
 }
-func pretransformrun(wo *World, c, m *Sorm) {
+func transformrun(wo *World, c, m *Sorm) {
 	c.m = c.m.Mul(m.m)
-	// c.sx *= m.W
-	// c.sy *= m.H
+	// c.sx *= m.Size.X
+	// c.sy *= m.Size.Y
 }
 
 type labelt struct {
@@ -1004,8 +989,8 @@ func (wo *World) compound2(s Sorm, realroot bool, args ...Sorm) Sorm {
 	var void func() Sorm
 
 	if realroot {
-		s.wl = wo.Wwin
-		s.hl = wo.Hwin
+		s.l.X = wo.Wwin
+		s.l.Y = wo.Hwin
 	}
 
 	for _, a := range args {
@@ -1128,7 +1113,7 @@ func (wo *World) Next() bool {
 
 func (wo *World) beginvirtual() (pool []Sorm) {
 	if sameslice(wo.pool, wo.auxpool) {
-		panic(`contraption: nested Sequences are not allowwed`)
+		panic(`contraption: nested Sequences are not allowed`)
 	}
 	pool = wo.pool
 	wo.pool = wo.auxpool
@@ -1231,42 +1216,42 @@ out:
 func noaligner(wo *World, c *Sorm) {
 	minp := Point{}
 	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
-		c.W = max(c.W, k.W)
-		c.H = max(c.H, k.H)
-		if k.W < 0 {
-			minp.X = min(minp.X, k.W)
+		c.Size.X = max(c.Size.X, k.Size.X)
+		c.Size.Y = max(c.Size.Y, k.Size.Y)
+		if k.Size.X < 0 {
+			minp.X = min(minp.X, k.Size.X)
 		}
-		if k.H < 0 {
-			minp.Y = min(minp.Y, k.H)
+		if k.Size.Y < 0 {
+			minp.Y = min(minp.Y, k.Size.Y)
 		}
 	})
 	if c.flags&flagHshrink > 0 {
-		c.wl = c.W
+		c.l.X = c.Size.X
 	}
 	if c.flags&flagVshrink > 0 {
-		c.hl = c.H
+		c.l.Y = c.Size.Y
 	}
 	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
 		stretch := false
-		if k.W < 0 {
-			k.W = c.wl * k.W / minp.X
-			k.W += k.addw
+		if k.Size.X < 0 {
+			k.Size.X = c.l.X * k.Size.X / minp.X
+			k.Size.X += k.add.X
 			stretch = true
 		}
-		if k.H < 0 {
-			k.H = c.hl * k.H / minp.Y
-			k.H += k.addh
+		if k.Size.Y < 0 {
+			k.Size.Y = c.l.Y * k.Size.Y / minp.Y
+			k.Size.Y += k.add.Y
 			stretch = true
 		}
 		if stretch {
-			k.hl = k.H
-			k.wl = k.W
+			k.l.Y = k.Size.Y
+			k.l.X = k.Size.X
 			wo.apply(c, k)
 		}
 	})
 	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
-		c.W = max(c.W, k.W)
-		c.H = max(c.H, k.H)
+		c.Size.X = max(c.Size.X, k.Size.X)
+		c.Size.Y = max(c.Size.Y, k.Size.Y)
 	})
 }
 
@@ -1282,9 +1267,9 @@ func axis(h bool) (begin, end func(k *Sorm)) {
 	swap := func(k *Sorm) {
 		if h {
 			// Y is main axis, X is secondary.
-			k.W, k.H = k.H, k.W
+			k.Size.X, k.Size.Y = k.Size.Y, k.Size.X
 			k.x, k.y = k.y, k.x
-			k.wl, k.hl = k.hl, k.wl
+			k.l.X, k.l.Y = k.l.Y, k.l.X
 			k.props.X, k.props.Y = k.props.Y, k.props.X
 			k.eprops.X, k.eprops.Y = k.eprops.Y, k.eprops.X
 			k.knowns.X, k.knowns.Y = k.knowns.Y, k.knowns.X
@@ -1312,16 +1297,16 @@ func sequencedivider(wo *World, c *Sorm, h bool) {
 			c.props.X = max(c.props.X, k.eprops.X)
 			c.props.Y += k.eprops.Y
 		} else {
-			k.eprops = geom.Pt(-min(0, k.W), -min(0, k.H))
-			if k.W >= 0 {
-				c.knowns.X = max(c.knowns.X, k.W)
+			k.eprops = geom.Pt(-min(0, k.Size.X), -min(0, k.Size.Y))
+			if k.Size.X >= 0 {
+				c.knowns.X = max(c.knowns.X, k.Size.X)
 			} else {
-				c.props.X = max(c.props.X, -k.W)
+				c.props.X = max(c.props.X, -k.Size.X)
 			}
-			if k.H >= 0 {
-				c.knowns.Y += k.H
+			if k.Size.Y >= 0 {
+				c.knowns.Y += k.Size.Y
 			} else {
-				c.props.Y += -k.H
+				c.props.Y += -k.Size.Y
 			}
 		}
 		endaxis(k)
@@ -1332,7 +1317,7 @@ func sequencedivider(wo *World, c *Sorm, h bool) {
 }
 
 func sequencealigner(wo *World, c *Sorm, h bool) {
-	c.W, c.H = 0, 0
+	c.Size.X, c.Size.Y = 0, 0
 	beginaxis, endaxis := axis(h)
 
 	// Calculate unknowns and apply kids which sizes were unknown,
@@ -1345,13 +1330,13 @@ func sequencealigner(wo *World, c *Sorm, h bool) {
 		beginaxis(k)
 		if k.eprops.Y > 0 {
 			// max() means we don't stretch if we're out of limit.
-			k.H = max(0, (c.hl-c.knowns.Y)/c.props.Y*k.eprops.Y)
-			k.hl = k.H
+			k.Size.Y = max(0, (c.l.Y-c.knowns.Y)/c.props.Y*k.eprops.Y)
+			k.l.Y = k.Size.Y
 			stretch = true
 		}
 		if k.eprops.X > 0 {
-			k.W = c.wl / c.props.X * k.eprops.X
-			k.wl = k.W
+			k.Size.X = c.l.X / c.props.X * k.eprops.X
+			k.l.X = k.Size.X
 			stretch = true
 		}
 		endaxis(k)
@@ -1362,11 +1347,11 @@ func sequencealigner(wo *World, c *Sorm, h bool) {
 
 		beginaxis(k)
 		k.y = y
-		y += k.H
-		c.W = max(c.W, k.W)
+		y += k.Size.Y
+		c.Size.X = max(c.Size.X, k.Size.X)
 		endaxis(k)
 	})
-	c.H = y
+	c.Size.Y = y
 	endaxis(c)
 }
 
@@ -1378,35 +1363,35 @@ func (wo *World) apply(p *Sorm, c *Sorm) {
 
 	// apply presumes that premodifiers are already sorted.
 	for _, m := range c.pres(wo) {
-		if m.tag == tagLimit && (m.W >= 0 || m.H >= 0) {
+		if m.tag == tagLimit && (m.Size.X >= 0 || m.Size.Y >= 0) {
 			preActions[-100-m.tag](wo, c, &m)
 		}
 	}
 
 	// Set scissor to limit if needed.
 	if c.flags&flagScissor > 0 {
-		c.scissor = geom.Rect(0, 0, c.wl, c.hl)
+		c.scissor = geom.Rect(0, 0, c.l.X, c.l.Y)
 	}
 	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
 		// NOTE Aligner is called after these assignments.
 		// 	So this can't influence limits at later stages.
-		k.wl = c.wl
-		k.hl = c.hl
+		k.l.X = c.l.X
+		k.l.Y = c.l.Y
 		// Inherit scissors and apply scale to them.
 		k.scissor = c.scissor
 
 		// Apply scale.
-		ns := k.m.ApplyPt(geom.Pt(k.W, k.H))
-		ims := k.m.ApplyPt(geom.Pt(k.addw, k.addh))
+		ns := k.m.ApplyPt(geom.Pt(k.Size.X, k.Size.Y))
+		ims := k.m.ApplyPt(geom.Pt(k.add.X, k.add.Y))
 		// Don't scale stretch coefficients.
-		k.W = cond(k.W >= 0, ns.X, k.W)
-		k.H = cond(k.H >= 0, ns.Y, k.H)
+		k.Size.X = cond(k.Size.X >= 0, ns.X, k.Size.X)
+		k.Size.Y = cond(k.Size.Y >= 0, ns.Y, k.Size.Y)
 		// But scale imaginaries.
-		k.addw = ims.X
-		k.addh = ims.Y
+		k.add.X = ims.X
+		k.add.Y = ims.Y
 
 		// Process only kids which sizes are known first.
-		if k.W >= 0 && k.H >= 0 {
+		if k.Size.X >= 0 && k.Size.Y >= 0 {
 			wo.apply(c, k)
 		}
 	})
@@ -1421,18 +1406,18 @@ func (wo *World) apply(p *Sorm, c *Sorm) {
 	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
 		// Apply size override to c if it has one.
 		if k.flags&flagOvrx > 0 {
-			c.W = k.W
+			c.Size.X = k.Size.X
 			c.x = min(c.x, -k.x)
 		}
 		if k.flags&flagOvry > 0 {
-			c.H = k.H
+			c.Size.Y = k.Size.Y
 			c.y = min(c.y, -k.y)
 		}
 	})
 
 	if c.flags&flagScissor > 0 {
-		c.W = min(c.W, c.wl)
-		c.H = min(c.H, c.hl)
+		c.Size.X = min(c.Size.X, c.l.X)
+		c.Size.Y = min(c.Size.Y, c.l.Y)
 	}
 }
 
@@ -1446,7 +1431,7 @@ func (wo *World) resolvepremods(_ *Sorm, c *Sorm) {
 	})
 
 	for _, m := range c.pres(wo) {
-		if m.tag == tagLimit && (m.W >= 0 || m.H >= 0) {
+		if m.tag == tagLimit && (m.Size.X >= 0 || m.Size.Y >= 0) {
 			continue
 		}
 		preActions[-100-m.tag](wo, c, &m)
@@ -1466,7 +1451,6 @@ func (wo *World) resolvepremods(_ *Sorm, c *Sorm) {
 
 func (wo *World) layout(pool []Sorm, root *Sorm) {
 	// Resolve premodifiers and stack negative sizes.
-	// println()
 	wo.resolvepremods(nil, root)
 	for i := 0; i < len(pool); i++ {
 		s := &pool[i]
@@ -1562,8 +1546,8 @@ func (wo *World) Develop() {
 
 	vgo.ResetTransform()
 	root := &wo.pool[len(wo.pool)-1]
-	root.wl = wo.Wwin
-	root.hl = wo.Hwin
+	root.l.X = wo.Wwin
+	root.l.Y = wo.Hwin
 
 	pool := wo.pool[0:wo.rend]
 
@@ -1584,7 +1568,7 @@ func (wo *World) Develop() {
 	// Apply conditional paints, match drag-and-drop events.
 	for i := len(pool) - 1; i >= 0; i-- {
 		s := &pool[i]
-		r := geom.Rect(s.x, s.y, s.x+s.W, s.y+s.H)
+		r := geom.Rect(s.x, s.y, s.x+s.Size.X, s.y+s.Size.Y)
 		if s.condfillstroke != nil {
 			s.fill, s.stroke = s.condfillstroke(r)
 		}
@@ -1684,14 +1668,14 @@ func (wo *World) Develop() {
 		vgo.SetStrokePaint(hexpaint(`#00000020`))
 		vgo.BeginPath()
 		for _, s := range pool {
-			if s.H < .5 && s.W < .5 {
+			if s.Size.Y < .5 && s.Size.X < .5 {
 				continue
 			}
 			s := s.decimate()
 			s.x -= 0.5
 			s.y -= 0.5
 			if s.tag >= 0 {
-				wo.Vgo.Rect(float32(s.x), float32(s.y), float32(s.W), float32(s.H))
+				wo.Vgo.Rect(float32(s.x), float32(s.y), float32(s.Size.X), float32(s.Size.Y))
 			}
 		}
 		vgo.ClosePath()
@@ -1731,6 +1715,13 @@ func (wo *World) Develop() {
 		v.counter--
 		if v.counter <= 0 {
 			delete(wo.keys, k)
+		}
+	}
+
+	for k, v := range wo.images {
+		if v.gen < wo.gen-2 {
+			wo.Vgo.DeleteImage(v.texid)
+			delete(wo.images, k)
 		}
 	}
 }
@@ -1867,6 +1858,7 @@ func New(config Config) (wo *World) {
 	wo.Events = NewEventTracer(wo.Window.window, config.ReplayReader)
 	wo.sinks = make([]func(any), 1)
 	wo.keys = map[any]*labelt{}
+	wo.images = map[io.Reader]imagestruct{}
 	wo.alloc = wo.allocmain
 	return wo
 }
