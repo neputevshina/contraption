@@ -82,8 +82,8 @@
 //		- Save matrix for every shape that looks behind, 64×8×16×[shape count] bytes of overhead
 //			- Simpler version: for every shape that has Cond/CondPaint, which is larger but still less than 10% of a tree
 //	- Laziness and scrolling [MAJOR TOPIC]
-//		- wo.Sequence(seq Sequence) — a window to infinity!
-//			- Every returned Sorm is included to the parent
+//		+ wo.Sequence(seq Sequence) — a window to infinity!
+//			+ Every returned Sorm is included to the parent
 //	- A way to create uniformly sized buttons (as per tonsky)
 //		- Just create a special component for this, dumb ass
 //		- func Huniform(...Sorm) Sorm
@@ -98,7 +98,7 @@
 //		- H2Vfollow, V2Hfollow — stretch as one, lay out as another
 //	- Subworlds — layout inside canvases
 //	- Modifier to shape position independence
-//	- Fix paint interface
+//	? Fix paint interface
 //	- Animations
 //	- Remove bodges from layout (impossible)
 //	+ Drag'n'drop

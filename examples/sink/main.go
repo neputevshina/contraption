@@ -283,13 +283,13 @@ func (wo *World) Examples() Sorm {
 					wo.Scissor(),
 					wo.Compound(
 						wo.Vfollow(),
-						wo.Rectangle(100, 100).Fill(dark),
+						wo.Rectangle(100, 50).Fill(dark),
 						wo.Rectangle(100, 100).Fill(yellow)))
 			}),
 			wo.Example(`Illustration`, func() Sorm {
 				return wo.Compound(
 					wo.Limit(100, 100),
-					wo.Halign(1),
+					wo.Halign(0.3),
 					wo.Scissor(),
 					wo.Illustration(-1, -1, "zoom", okcomputer))
 			}),

@@ -386,7 +386,6 @@ func illustrationrun(wo *World, s *Sorm) {
 	vgo := wo.Vgo
 
 	vgo.Save()
-	vgo.Reset()
 
 	vgo.SetTransform(geom2nanovgo(s.m.Translate(s.x, s.y)))
 
