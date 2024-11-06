@@ -65,7 +65,7 @@ func main() {
 		wo.Root(
 			wo.Transform(geom.Scale2d(scale, scale)),
 			wo.Compound(
-				wo.Sequence(contraption.SliceSequence2(wo.Trace, func(i int) contraption.Sorm {
+				wo.Sequence(contraption.SliceSequence2(wo.Trace[:len(wo.Trace)-1], func(i int) contraption.Sorm {
 					p := `#00000000`
 					h := complex128(1.0)
 					switch wo.Trace[i].E.(type) {

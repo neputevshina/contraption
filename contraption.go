@@ -933,8 +933,6 @@ func (wo *World) Transform(m geom.Geom) (s Sorm) {
 }
 func transformrun(wo *World, c, m *Sorm) {
 	c.m = c.m.Mul(m.m)
-	// c.sx *= m.Size.X
-	// c.sy *= m.Size.Y
 }
 
 type labelt struct {
@@ -1022,7 +1020,6 @@ func (wo *World) compound2(s Sorm, realroot bool, args ...Sorm) Sorm {
 		}
 	}
 
-	// s = wo.newCompound()
 	s.tag = 0
 
 	// Shape pass
@@ -1106,7 +1103,7 @@ func (wo *World) Next() bool {
 	wo.Vgo.BeginFrame(w, h, float32(math.Ceil(float64(sc))))
 
 	wo.Vgo.SetFontFace(`go`)
-	wo.Vgo.SetFontSize(17) // FIXME Cap size of Go 17 is 11
+	wo.Vgo.SetFontSize(11)
 
 	return true
 }
@@ -1445,6 +1442,7 @@ func (wo *World) resolvepremods(_ *Sorm, c *Sorm) {
 	// }
 
 	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
+		k.m = c.m
 		wo.resolvepremods(c, k)
 	})
 }
@@ -1556,9 +1554,9 @@ func (wo *World) Develop() {
 	}
 
 	wo.layout(pool, last(pool))
-	for i := range wo.scissored {
-		wo.layout(pool, wo.scissored[i])
-	}
+	// for i := range wo.scissored {
+	// 	wo.layout(pool, wo.scissored[i])
+	// }
 
 	// Sort in draw order.
 	slices.SortFunc(pool, func(a, b Sorm) int {

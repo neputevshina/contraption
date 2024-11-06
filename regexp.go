@@ -37,11 +37,11 @@ type rinst struct {
 func (i *rinst) String() string {
 	var in, begin, end string
 	switch i.where {
-	case 0:
+	case ruleAny:
 		in = " any"
-	case 1:
+	case ruleIn:
 		in = " in"
-	case 2:
+	case ruleOut:
 		in = " out"
 	}
 	if i.begin {

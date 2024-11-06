@@ -63,8 +63,9 @@ func (wo *World) generalNewText(font []byte, kind tagkind) func(size float64, st
 	return func(size float64, str string) Sorm {
 		s := wo.newSorm()
 		s.tag = kind
+
 		s.Size.Y = size
-		// s.r = f.vgok * 1.42
+
 		s.vecfont = f
 		s.fontid = f.Vgoid
 		wo.Vgo.SetFontFaceID(s.fontid)
@@ -387,7 +388,7 @@ func illustrationrun(wo *World, s *Sorm) {
 
 	vgo.Save()
 
-	vgo.SetTransform(geom2nanovgo(s.m.Translate(s.x, s.y)))
+	vgo.SetTransform(geom2nanovgo(geom.Translate2d(s.x, s.y)))
 
 	u, ok := wo.images[s.key.(io.Reader)]
 	if !ok {
@@ -395,7 +396,8 @@ func illustrationrun(wo *World, s *Sorm) {
 	}
 
 	frame := s.Size
-	origprop := u.origsiz.X / u.origsiz.Y
+	oz := u.origsiz
+	origprop := oz.X / oz.Y
 
 	// TODO Can be more pretty
 	switch s.fontid {

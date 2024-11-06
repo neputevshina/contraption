@@ -18,7 +18,7 @@ func concretenew(config Config, wo *World) {
 	var err error
 
 	_ = glfw.Init()
-	glfw.WindowHint(glfw.Samples, 7)
+	glfw.WindowHint(glfw.Samples, 4)
 	wo.Window.window, _ = glfw.CreateWindow(config.WindowRect.Dx(), config.WindowRect.Dy(), "", nil, nil)
 	if config.WindowRect.Min.X != 0 && config.WindowRect.Min.Y != 0 {
 		wo.Window.SetPos(config.WindowRect.Min.X, config.WindowRect.Min.Y)
