@@ -97,7 +97,7 @@
 //		- Other proposed names: Hequalize, Vequalize
 //		- H2Vfollow, V2Hfollow — stretch as one, lay out as another
 //	- Subworlds — layout inside canvases
-//	- Modifier to shape position independence
+//	? Modifier to shape position independence
 //	? Fix paint interface
 //	- Animations
 //	- Remove bodges from layout (impossible)
@@ -179,6 +179,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"reflect"
 	"runtime"
 	"strings"
 	"unsafe"
@@ -211,6 +212,8 @@ const (
 	flagNegativeOvry
 	flagIteratedNotScissor
 	flagIteratedScissor
+	flagDontDecimate
+	flagDecimate
 )
 
 //go:generate stringer -type=tagkind -trimprefix=tag
@@ -263,6 +266,8 @@ const (
 	tagLimit // Limit must be executed after update of a matrix, but before aligners, because it influences size.
 	tagVfollow
 	tagHfollow
+	tagDontDecimate
+	tagDecimate
 )
 const (
 	alignerNone alignerkind = iota
@@ -315,6 +320,8 @@ func init() {
 	preActions[-100-tagHshrink] = hshrinkrun
 	preActions[-100-tagVshrink] = vshrinkrun
 	preActions[-100-tagLimit] = limitrun
+	preActions[-100-tagDontDecimate] = dontdecimaterun
+	preActions[-100-tagDecimate] = decimaterun
 
 	alignerActions[alignerNone] = noaligner
 	alignerActions[alignerVfollow] = vfollowaligner
@@ -364,10 +371,10 @@ type World struct {
 	keys      map[any]*labelt
 	BeforeVgo func()
 
-	drag       any
-	dragstart  geom.Point
-	sinks      []func(any)
-	DragEffect func(interval [2]geom.Point, drag any) Sorm
+	drag        any
+	dragstart   geom.Point
+	sinks       []func(any)
+	dragEffects map[reflect.Type]func(interval [2]geom.Point, drag any) Sorm
 
 	showOutlines bool
 	f1           bool
@@ -378,6 +385,19 @@ type World struct {
 	scissoring bool
 
 	images map[io.Reader]imagestruct
+}
+
+func AddDragEffect[T any](wo *World, convert func(interval [2]geom.Point, drag T) Sorm) {
+	var z T
+	wo.dragEffects[typeof(z)] = func(interval [2]geom.Point, drag any) Sorm {
+		return convert(interval, drag.(T))
+	}
+}
+
+func (wo *World) ResetDragEffects() {
+	for k := range wo.dragEffects {
+		delete(wo.dragEffects, k)
+	}
 }
 
 type imagestruct struct {
@@ -542,10 +562,11 @@ func (s Sorm) String() string {
 	}
 	scissor := cond(s.scissor.Dx() > 0 && s.scissor.Dy() > 0, fmt.Sprint(s.scissor), "{/}")
 
-	return fmt.Sprint(z, strings.Repeat(" ", max(0, 10-digits)), seq, ovrx, ovry, btw, " ", s.tag.String(), " ", vals, ` `, s.props, ` `, scissor, key, " ", s.callerfile, ":", s.callerline)
+	return fmt.Sprint(z, strings.Repeat(" ", max(0, 10-digits)), seq, ovrx, ovry, btw, " ", s.tag.String(), " ", vals, ` `, s.props, ` `, scissor, key) //, " ", s.callerfile, ":", s.callerline)
 }
 
 func (s Sorm) decimate() Sorm {
+	// FIXME Decimation is now done inside layout.
 	s.x = math.Floor(s.x)
 	s.y = math.Floor(s.y)
 	s.Size.X = math.Ceil(s.Size.X)
@@ -669,295 +690,6 @@ func (s Sorm) Rectangle() geom.Rectangle {
 	return geom.Rect(s.x, s.y, s.x+s.Size.X, s.y+s.Size.Y)
 }
 
-func (wo *World) Vfollow() (s Sorm) {
-	s = wo.newSorm()
-	s.tag = tagVfollow
-	return
-}
-func vfollowrun(wo *World, c, m *Sorm) {
-	c.aligner = alignerVfollow
-}
-
-func (wo *World) Hfollow() (s Sorm) {
-	s = wo.newSorm()
-	s.tag = tagHfollow
-	return
-}
-func hfollowrun(wo *World, c, m *Sorm) {
-	c.aligner = alignerHfollow
-}
-
-func (wo *World) Halign(amt float64) (s Sorm) {
-	s = wo.newSorm()
-	s.tag = tagHalign
-	s.Size.X = clamp(0, amt, 1)
-	return
-}
-func halignrun(wo *World, c, m *Sorm) {
-	x := 0.0
-	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
-		x = max(x, k.Size.X)
-	})
-	c.Size.X = max(c.Size.X, x)
-	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
-		k.x += (x - k.Size.X) * m.Size.X
-		k.ialign.X = m.Size.X
-	})
-}
-
-func (wo *World) Valign(amt float64) (s Sorm) {
-	s = wo.newSorm()
-	s.tag = tagValign
-	s.Size.X = clamp(0, amt, 1)
-	return
-}
-func valignrun(wo *World, c, m *Sorm) {
-	y := 0.0
-	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
-		y = max(y, k.Size.Y)
-	})
-	c.Size.Y = max(c.Size.Y, y)
-	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
-		k.y += (y - k.Size.Y) * m.Size.X
-		k.ialign.Y = m.Size.X
-	})
-}
-
-func (wo *World) Fill(p nanovgo.Paint) (s Sorm) {
-	s = wo.newSorm()
-	s.tag = tagFill
-	s.fill = p
-	return
-}
-func fillrun(wo *World, s, m *Sorm) {
-	s.kidsiter(wo, kiargs{}, func(k *Sorm) {
-		if k.tag >= 0 {
-			k.fill = m.fill
-		}
-	})
-}
-
-func (wo *World) Stroke(p nanovgo.Paint) (s Sorm) {
-	s = wo.newSorm()
-	s.tag = tagStroke
-	s.stroke = p
-	return
-}
-func strokerun(wo *World, s, m *Sorm) {
-	s.kidsiter(wo, kiargs{}, func(k *Sorm) {
-		if k.tag >= 0 {
-			k.stroke = m.stroke
-		}
-	})
-}
-
-func (wo *World) Strokewidth(w float64) (s Sorm) {
-	s = wo.newSorm()
-	s.tag = tagStrokewidth
-	s.strokew = float32(w)
-	return
-}
-func strokewidthrun(wo *World, s, m *Sorm) {
-	s.flags |= flagSetStrokewidth
-	s.kidsiter(wo, kiargs{}, func(k *Sorm) {
-		if k.tag >= 0 {
-			k.strokew = m.strokew
-		}
-	})
-}
-
-func (wo *World) Identity(key any) (s Sorm) {
-	s = wo.newSorm()
-	s.tag = tagIdentity
-	s.key = key
-	return
-}
-func identityrun(wo *World, s, m *Sorm) {
-	s.key = m.key
-	m.key = nil
-}
-
-// Cond adds an event callback to a Compound.
-func (wo *World) Cond(f func(m Matcher)) (s Sorm) {
-	s = wo.newSorm()
-	s.tag = tagCond
-	s.cond = f
-	return
-}
-func condrun(wo *World, s, m *Sorm) {
-	s.cond = m.cond
-}
-
-// CondFill adds an event callback to a Compound.
-func (wo *World) CondFill(f func(geom.Rectangle) nanovgo.Paint) (s Sorm) {
-	s = wo.newSorm()
-	s.tag = tagCondfill
-	s.condfill = f
-	return
-}
-func condfillrun(wo *World, s, m *Sorm) {
-	s.condfill = m.condfill
-}
-
-func (wo *World) CondStroke(f func(geom.Rectangle) nanovgo.Paint) (s Sorm) {
-	s = wo.newSorm()
-	s.tag = tagCondstroke
-	s.condstroke = f
-	return
-}
-func condstrokerun(wo *World, s, m *Sorm) {
-	s.condstroke = m.condstroke
-}
-
-// Between adds a Sorm from given constructor between every other shape in a compound.
-func (wo *World) Between(f func() Sorm) (s Sorm) {
-	s = wo.newSorm()
-	s.tag = tagBetween
-	s.key = f
-	return
-}
-func betweenrun(wo *World, s, m *Sorm) {
-	// Between is the special case and handled in Compound()
-}
-
-// BetweenVoid adds a Void between every other shape of a compound.
-func (wo *World) BetweenVoid(w, h complex128) (s Sorm) {
-	return wo.Between(func() Sorm { return wo.Void(w, h) })
-}
-
-// Source marks area of current compound as a drag source.
-// It uses compound's identity (set with Identity modifier) as a drag value.
-func (wo *World) Source() (s Sorm) {
-	s = wo.newSorm()
-	s.tag = tagSource
-	return
-}
-func sourcerun(wo *World, s *Sorm, m *Sorm) {
-	s.flags |= flagSource
-}
-
-// Sink marks area of current compound as a drag sink.
-// When program receives Release(1) event with mouse cursor inside a sink,
-// it calls given function with a drag value.
-func (wo *World) Sink(f func(drop any)) (s Sorm) {
-	s = wo.newSorm()
-	s.tag = tagSink
-	s.sinkid = len(wo.sinks)
-	wo.sinks = append(wo.sinks, f)
-	return
-}
-func sinkrun(wo *World, s *Sorm, m *Sorm) {
-	s.sinkid = m.sinkid
-	m.sinkid = 0
-}
-
-// Hshrink is a modifier that makes negative horizontal values inside a compound without Hfollow or Vfollow to
-// be set not to horizontal limit, but to maximum horizontal value of objects with known size.
-// TODO Make description more readable.
-func (wo *World) Hshrink() (s Sorm) {
-	s = wo.newSorm()
-	s.tag = tagHshrink
-	return
-}
-func hshrinkrun(wo *World, s *Sorm, m *Sorm) {
-	s.flags |= flagHshrink
-}
-
-// Vshrink is a modifier that works exactly like Hshrink, but for vertical sizes.
-func (wo *World) Vshrink() (s Sorm) {
-	s = wo.newSorm()
-	s.tag = tagVshrink
-	return
-}
-func vshrinkrun(wo *World, s *Sorm, m *Sorm) {
-	s.flags |= flagVshrink
-}
-
-// Scissor limits the painting area of a Compound to its Limit.
-func (wo *World) Scissor() (s Sorm) {
-	s = wo.newSorm()
-	s.tag = tagScissor
-	return
-}
-func scissorrun(wo *World, s *Sorm, m *Sorm) {
-	s.flags |= flagScissor
-}
-
-// Limit limits the maximum compound size to specified limits.
-// If a given size is negative, it limits the corresponding size of a compound by
-// the rules of negative units for shapes.
-// TODO Imaginary limits.
-func (wo *World) Limit(w, h float64) (s Sorm) {
-	s = wo.newSorm()
-	s.tag = tagLimit
-	s.Size.X, s.Size.Y = w, h
-	return
-}
-func limitrun(wo *World, s, m *Sorm) {
-	p := s.m.ApplyPt(geom.Pt(m.Size.X, m.Size.Y))
-	if m.Size.X > 0 {
-		m.Size.X = p.X
-		s.l.X = min(s.l.X, m.Size.X)
-	} else if m.Size.X < 0 {
-		s.eprops.X = -m.Size.X
-	}
-	if m.Size.Y > 0 {
-		m.Size.Y = p.Y
-		s.l.Y = min(s.l.Y, m.Size.Y)
-	} else if m.Size.Y < 0 {
-		s.eprops.Y = -m.Size.Y
-	}
-}
-
-// Posttransform applies transformation that only affects objects visually.
-// It doesn't affect object sizes for layout.
-func (wo *World) Posttransform(x, y float64) (s Sorm) {
-	s = wo.newSorm()
-	s.tag = tagPosttransform
-	s.Size.X = x
-	s.Size.Y = y
-	return
-}
-func posttransformrun(wo *World, c, m *Sorm) {
-	c.x += m.Size.X
-	c.y += m.Size.Y
-	// Because moves are inherited in a separate pass
-}
-
-// Transform applies transformation that affects objects sizes for layout.
-func (wo *World) Transform(m geom.Geom) (s Sorm) {
-	s = wo.newSorm()
-	s.tag = tagTransform
-	s.m = m
-	return
-}
-func transformrun(wo *World, c, m *Sorm) {
-	c.m = c.m.Mul(m.m)
-}
-
-type labelt struct {
-	value   any
-	counter int
-}
-
-func (wo *World) Whereis(s Sorm) Sorm {
-	s.flags |= flagFindme
-	return s
-}
-
-// Key is a temporary key-value storage for on-screen state.
-// The value is deleted if it has been not accessed for two frames.
-func (wo *World) Key(k any) (v *any) {
-	mv, ok := wo.keys[k]
-	if !ok {
-		wo.keys[k] = &labelt{}
-		mv = wo.keys[k]
-	}
-	mv.counter = 2
-	v = &mv.value
-	return
-}
-
 // Cat returns a Compound from two Sorm sources.
 // Its intended usage is for defining user's own abstractions.
 func (wo *World) Cat(a, b []Sorm) (s Sorm) {
@@ -1060,9 +792,9 @@ func (wo *World) Root(s ...Sorm) {
 	wo.Compound(
 		wo.Void(complex(wo.Wwin, 0), complex(wo.Hwin, 0)),
 		func() Sorm {
-			if wo.DragEffect != nil && wo.drag != nil {
+			if wo.dragEffects[typeof(wo.drag)] != nil && wo.drag != nil {
 				ps := [2]geom.Point{wo.dragstart, wo.Trace[0].Pt}
-				return wo.DragEffect(ps, wo.drag)
+				return wo.dragEffects[typeof(wo.drag)](ps, wo.drag)
 			}
 			return Sorm{}
 		}(),
@@ -1321,6 +1053,7 @@ func sequencealigner(wo *World, c *Sorm, h bool) {
 	// lay out the sequence then.
 	y := 0.0
 	beginaxis(c)
+	r := .0
 	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
 		stretch := false
 
@@ -1328,6 +1061,12 @@ func sequencealigner(wo *World, c *Sorm, h bool) {
 		if k.eprops.Y > 0 {
 			// max() means we don't stretch if we're out of limit.
 			k.Size.Y = max(0, (c.l.Y-c.knowns.Y)/c.props.Y*k.eprops.Y)
+			// Round the lengths and sizes to the nearest integer.
+			// TODO Accumulate error in kids and try to make it strobe less.
+			if c.flags&flagDecimate > 0 || !(c.flags&flagDontDecimate > 0) {
+				r += k.Size.Y - math.Round(k.Size.Y)
+				k.Size.Y = math.Round(k.Size.Y)
+			}
 			k.l.Y = k.Size.Y
 			stretch = true
 		}
@@ -1348,7 +1087,10 @@ func sequencealigner(wo *World, c *Sorm, h bool) {
 		c.Size.X = max(c.Size.X, k.Size.X)
 		endaxis(k)
 	})
-	c.Size.Y = y
+	c.Size.Y = y + r
+	if c.flags&flagDecimate > 0 || !(c.flags&flagDontDecimate > 0) {
+		c.Size.Y = math.Round(c.Size.Y)
+	}
 	endaxis(c)
 }
 
@@ -1442,7 +1184,10 @@ func (wo *World) resolvepremods(_ *Sorm, c *Sorm) {
 	// }
 
 	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
+		// Cascade matrices and some flags
 		k.m = c.m
+		k.flags |= c.flags & flagDontDecimate
+		k.flags |= c.flags & flagDecimate
 		wo.resolvepremods(c, k)
 	})
 }
@@ -1484,8 +1229,10 @@ func (wo *World) layout(pool []Sorm, root *Sorm) {
 	// Do the layout.
 	wo.apply(nil, root)
 
-	// Inherit moves and paints.
+	// Inherit moves. Cascade scissors, fills and strokes.
 	// TODO Maybe wo.apply should do it? Kind of makes more sense.
+	// The reason it is separated is because we don't know how absolute component
+	// sizes and coordinates till the very end.
 	inh := func(c, efc *Sorm) {
 		c.kidsiter(wo, kiargs{}, func(k *Sorm) {
 			k.x += efc.x
@@ -1857,6 +1604,7 @@ func New(config Config) (wo *World) {
 	wo.sinks = make([]func(any), 1)
 	wo.keys = map[any]*labelt{}
 	wo.images = map[io.Reader]imagestruct{}
+	wo.dragEffects = map[reflect.Type]func(interval [2]geom.Point, drag any) Sorm{}
 	wo.alloc = wo.allocmain
 	return wo
 }

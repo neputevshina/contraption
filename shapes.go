@@ -378,6 +378,8 @@ func (wo *World) Illustration(w, h complex128, mode string, src io.Reader) (s So
 		s.fontid = 2
 	case "pad":
 		s.fontid = 3
+	default:
+		panic(`contraption: picture stretch mode is not one of "stretch", "zoom" or "pad"`)
 	}
 
 	return s

@@ -388,7 +388,7 @@ type Symbol int
 
 const (
 	Silence Symbol = iota
-	Blur
+	Unfocus
 	Ack
 )
 

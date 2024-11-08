@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"strconv"
 	"time"
 
@@ -12,6 +13,9 @@ import (
 	"golang.org/x/image/font/gofont/goregular"
 
 	_ "embed"
+
+	"net/http"
+	_ "net/http/pprof"
 )
 
 //go:embed okcomputer.jpg
@@ -42,6 +46,10 @@ var (
 )
 
 func main() {
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
+
 	wo := World{
 		World: contraption.New(contraption.Config{}),
 	}
@@ -49,6 +57,13 @@ func main() {
 	// f, _ := contraption.NewFont(nil, goregular.TTF, "")
 	// println(f.Captoem(53))
 	// wo.Vgo.CreateFontFromMemory("asdf", goregular.TTF, 0)
+
+	contraption.AddDragEffect[*float64](wo.World, func(interval [2]geom.Point, f *float64) Sorm {
+		r := wo.Prevkey(Tag(f, 1)).Rectangle()
+		*f = (interval[1].X - r.Min.X) / r.Dx()
+		*f = max(0, min(*f, 1))
+		return Sorm{}
+	})
 
 	for wo.Next() {
 		if wo.Match(`!Release(Ctrl)* Press(Ctrl)`) {
@@ -101,21 +116,24 @@ func main() {
 				wo.Valign(1),
 				wo.Void(-1, -1),
 				wo.Compound(
-					wo.Vfollow(),
 					wo.Compound(
-						wo.Hfollow(),
-						wo.Void(5, 0),
-						wo.Label(`Ctrl+Scroll — scale interface, Ctrl+E — reset scale`),
-						wo.Void(-1, 0),
-						wo.Label(strconv.FormatFloat(scale*100, 'f', 0, 64), "%").
-							Cond(func(m contraption.Matcher) {
-								if m.Match(`Click`) {
-									scale = 1.0
-								}
-							}),
-						wo.Void(5, 0),
-					),
-					wo.Void(0, 5)),
+						wo.Vfollow(),
+						wo.Compound(
+							wo.Vfollow(),
+							wo.Compound(
+								wo.Hfollow(),
+								wo.Void(5, 0),
+								wo.Label(`Ctrl+Scroll — scale interface, Ctrl+E — reset scale`),
+								wo.Void(-1, 0),
+								wo.Label(strconv.FormatFloat(scale*100, 'f', 0, 64), "%").
+									Cond(func(m contraption.Matcher) {
+										if m.Match(`Click`) {
+											scale = 1.0
+										}
+									}),
+								wo.Void(5, 0),
+							),
+							wo.Void(0, 5)))),
 			),
 		)
 
@@ -124,16 +142,6 @@ func main() {
 }
 
 func (wo *World) Examples() Sorm {
-	// TODO Pluggable DragEffects
-	wo.DragEffect = func(interval [2]geom.Point, drag any) Sorm {
-		if f, ok := drag.(*float64); ok {
-			r := wo.Prevkey(Tag(f, 1)).Rectangle()
-			*f = (interval[1].X - r.Min.X) / r.Dx()
-			*f = max(0, min(*f, 1))
-		}
-		return Sorm{}
-	}
-
 	return wo.Compound(
 		wo.Vfollow(),
 		wo.BetweenVoid(0, 64),
@@ -196,17 +204,19 @@ func (wo *World) Examples() Sorm {
 						wo.Rectangle(-1, -1),
 						wo.Rectangle(-2, -1),
 						wo.Compound(
+							wo.DontDecimate(),
 							wo.Vfollow(),
 							wo.Rectangle(-1, -1),
 							wo.Compound(
 								wo.Hfollow(),
-								wo.Rectangle(-1, -1),
+								wo.Rectangle(complex(lerp(-2, -8, slider0), 0), -1),
 								wo.Rectangle(-1, -1),
 							),
-							wo.Rectangle(-2, -1),
+							wo.Rectangle(complex(lerp(-8, -2, slider1), 0), complex(lerp(-8, -1, slider1), 0)),
 							wo.Rectangle(-1, -1)),
 						wo.Rectangle(-2, -2),
 						wo.Compound(
+							wo.Decimate(),
 							wo.Hfollow(),
 							wo.Limit(-1, -4),
 							wo.Rectangle(-1, -1),
@@ -289,7 +299,7 @@ func (wo *World) Examples() Sorm {
 			wo.Example(`Illustration`, func() Sorm {
 				return wo.Compound(
 					wo.Limit(100, 100),
-					wo.Halign(0.3),
+					wo.Halign(numbox),
 					wo.Scissor(),
 					wo.Illustration(-1, -1, "zoom", okcomputer))
 			}),
