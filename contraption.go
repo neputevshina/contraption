@@ -873,6 +873,10 @@ func (s *Sorm) kidsiter(wo *World, a kiargs, f func(k *Sorm)) {
 		return
 	}
 
+	// if s.flags&flagScissor > 0 && !wo.scissoring {
+	// 	return
+	// }
+
 	// mode := func(k *Sorm) bool {
 	// 	if !wo.scissoring && k.flags&flagIteratedScissor == 0 {
 	// 		k.flags |= flagIteratedNotScissor
@@ -1109,8 +1113,11 @@ func sequencealigner(wo *World, c *Sorm, h bool) {
 			// Round lengths and sizes to the nearest integer.
 			// TODO Accumulate error in kids and try to make it strobe less.
 			if c.flags&flagDecimate > 0 || !(c.flags&flagDontDecimate > 0) {
-				e += k.Size.Y - math.Round(k.Size.Y)
-				k.Size.Y = math.Round(k.Size.Y)
+				ee, eed := roundmodf(e)
+				eo, ea := roundmodf(k.Size.Y + ee)
+				e = eed
+				e += eo
+				k.Size.Y = ea
 			}
 			k.l.Y = k.Size.Y
 			stretch = true
@@ -1237,11 +1244,11 @@ func (wo *World) resolvepremods(_ *Sorm, c *Sorm) {
 		k.flags |= c.flags & flagDontDecimate
 		k.flags |= c.flags & flagDecimate
 		wo.resolvepremods(c, k)
-		// Resolve sprite text widths based off a real font size
+		// Resolve sprite text widths based on a real font size
 		// TODO Broken, probably because of incorrect scaling with matrices
 		// TODO Vertical
 		// TODO flagNonlinear — set the size of an element only after setting up the matrix.
-		//	Another element with this property is Equation.
+		//	Equation is the another type of element with this property.
 		if k.tag == tagText {
 			s := k
 			wo.Vgo.SetFontFaceID(s.fontid)
@@ -1346,9 +1353,11 @@ func (wo *World) Develop() {
 	}
 
 	wo.layout(pool, last(pool))
+	// wo.scissoring = true
 	// for i := range wo.scissored {
 	// 	wo.layout(pool, wo.scissored[i])
 	// }
+	// wo.scissoring = false
 
 	// Sort in draw order.
 	slices.SortFunc(pool, func(a, b Sorm) int {

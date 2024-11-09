@@ -441,3 +441,8 @@ func zeroandclear[T any](pool *[]T) {
 	}
 	(*pool) = (*pool)[:0]
 }
+
+func roundmodf(f float64) (float64, float64) {
+	r := math.Round(f)
+	return f - r, r
+}
