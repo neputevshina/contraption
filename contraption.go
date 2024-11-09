@@ -963,12 +963,12 @@ func (wo *World) topbreadthiter(pool []Sorm, f func(s, _ *Sorm)) {
 }
 
 func (wo *World) bottombreadthiter(pool []Sorm, f func(s, _ *Sorm)) {
-	for i := 0; i < len(pool); i++ {
+	for i := range pool {
 		s := &pool[i]
 		if s.tag == tagSequence {
 			p := wo.beginvirtual()
 			pool := wo.auxpool[s.kidsl:s.kidsr]
-			for i := len(pool) - 1; i >= 0; i-- {
+			for i := range pool {
 				s := &pool[i]
 				f(s, s)
 			}
@@ -1393,8 +1393,17 @@ func (wo *World) Develop() {
 	}
 
 	// Draw.
-	draw := func(s Sorm) {
-		s = s.decimate()
+	// FIXME auxpool is not sorted.
+	wo.bottombreadthiter(pool, func(s, _ *Sorm) {
+		if s.tag <= 0 {
+			return
+		}
+
+		if s.scissori > 0 && s.scissor.Intersect(s.Rectangle()) == (geom.Rectangle{}) {
+			return
+		}
+
+		*s = s.decimate()
 		// Set scissor up.
 		vgo.ResetScissor()
 		if s.scissor.Dx() > 0 && s.scissor.Dy() > 0 {
@@ -1426,28 +1435,9 @@ func (wo *World) Develop() {
 		case tagVectorText:
 		case tagCanvas:
 		}
-		shapeActions[s.tag](wo, &s)
+		shapeActions[s.tag](wo, s)
 		vgo.ResetTransform()
-	}
-	for _, s := range pool {
-		if s.tag <= 0 {
-			continue
-		}
-		if s.tag == tagSequence {
-			// At this moment every shape inside a sequence is cached,
-			// just read it directly.
-			// TODO This approach can be extended with recursion and a list of auxpools to support nested sequences.
-			pool := wo.auxpool[s.kidsl:s.kidsr]
-			for _, s := range pool {
-				if s.tag <= 0 {
-					continue
-				}
-				draw(s)
-			}
-		} else {
-			draw(s)
-		}
-	}
+	})
 
 	wo.Vgo.Reset()
 
@@ -1469,6 +1459,17 @@ func (wo *World) Develop() {
 				wo.Vgo.Rect(float32(s.p.X), float32(s.p.Y), float32(s.Size.X), float32(s.Size.Y))
 			}
 		}
+		for _, s := range wo.auxpool {
+			if s.Size.Y < .5 && s.Size.X < .5 {
+				continue
+			}
+			s := s.decimate()
+			s.p.X -= 0.5
+			s.p.Y -= 0.5
+			if s.tag >= 0 {
+				wo.Vgo.Rect(float32(s.p.X), float32(s.p.Y), float32(s.Size.X), float32(s.Size.Y))
+			}
+		}
 		vgo.ClosePath()
 		vgo.Stroke()
 
@@ -1476,6 +1477,21 @@ func (wo *World) Develop() {
 		vgo.SetFillPaint(hexpaint(`#ff000020`))
 		vgo.BeginPath()
 		for _, s := range pool {
+			if s.scissori == 0 {
+				continue
+			}
+			if s.Size.Y < .5 && s.Size.X < .5 {
+				continue
+			}
+			s := s.decimate()
+			s.p.X -= 0.5
+			s.p.Y -= 0.5
+			if s.tag >= 0 {
+				wo.Vgo.Rect(float32(s.scissor.Min.X), float32(s.scissor.Min.Y),
+					float32(s.scissor.Dx()), float32(s.scissor.Dy()))
+			}
+		}
+		for _, s := range wo.auxpool {
 			if s.scissori == 0 {
 				continue
 			}
