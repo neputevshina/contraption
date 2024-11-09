@@ -51,11 +51,11 @@ func (s Segment) String() string {
 }
 
 type (
-	Point     = geom.Point
-	Rectangle = geom.Rectangle
+	point     = geom.Point
+	rectangle = geom.Rectangle
 )
 
-var Pt = geom.Pt
+var pt = geom.Pt
 
 func validSize(r []rune) bool {
 	return sizeRegexp.MatchReader(untoRuneScanner(r))

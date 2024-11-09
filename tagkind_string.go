@@ -42,22 +42,24 @@ func _() {
 	_ = x[tagLimit - -106]
 	_ = x[tagVfollow - -107]
 	_ = x[tagHfollow - -108]
+	_ = x[tagDontDecimate - -109]
+	_ = x[tagDecimate - -110]
 }
 
 const (
-	_tagkind_name_0 = "HfollowVfollowLimitVshrinkHshrinkScissorTransformPosttransform"
+	_tagkind_name_0 = "DecimateDontDecimateHfollowVfollowLimitVshrinkHshrinkScissorTransformPosttransform"
 	_tagkind_name_1 = "SinkSourceScrollBetweenCondstrokeCondfillCondIdentityStrokewidthStrokeFillValignHalignCompoundCircleRectRoundrectVoidEquationTextCanvasVectorTextTopDownTextBottomUpTextSequenceIllustration"
 )
 
 var (
-	_tagkind_index_0 = [...]uint8{0, 7, 14, 19, 26, 33, 40, 49, 62}
+	_tagkind_index_0 = [...]uint8{0, 8, 20, 27, 34, 39, 46, 53, 60, 69, 82}
 	_tagkind_index_1 = [...]uint8{0, 4, 10, 16, 23, 33, 41, 45, 53, 64, 70, 74, 80, 86, 94, 100, 104, 113, 117, 125, 129, 135, 145, 156, 168, 176, 188}
 )
 
 func (i tagkind) String() string {
 	switch {
-	case -108 <= i && i <= -101:
-		i -= -108
+	case -110 <= i && i <= -101:
+		i -= -110
 		return _tagkind_name_0[_tagkind_index_0[i]:_tagkind_index_0[i+1]]
 	case -13 <= i && i <= 12:
 		i -= -13

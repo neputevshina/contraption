@@ -23,6 +23,12 @@ func hfollowrun(wo *World, c, m *Sorm) {
 	c.aligner = alignerHfollow
 }
 
+// Halign aligns elements horizontally.
+//
+// If amt == 0, elements are aligned to the left, if 0.5 to the middle and if 1 to the right.
+// Values between those are acceptable.
+//
+// amt is clipped to the range 0 < amt < 1.
 func (wo *World) Halign(amt float64) (s Sorm) {
 	s = wo.newSorm()
 	s.tag = tagHalign
@@ -36,11 +42,16 @@ func halignrun(wo *World, c, m *Sorm) {
 	})
 	c.Size.X = max(c.Size.X, x)
 	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
-		k.x += (x - k.Size.X) * m.Size.X
+		k.p.X += (x - k.Size.X) * m.Size.X
 		k.ialign.X = m.Size.X
 	})
 }
 
+// Valign aligns elements vertically.
+// If amt == 0, elements are aligned to the top, if 0.5 to the center and if 1 to the bottom.
+// Values between those are acceptable.
+//
+// amt is clipped to the range 0 < amt < 1.
 func (wo *World) Valign(amt float64) (s Sorm) {
 	s = wo.newSorm()
 	s.tag = tagValign
@@ -54,11 +65,12 @@ func valignrun(wo *World, c, m *Sorm) {
 	})
 	c.Size.Y = max(c.Size.Y, y)
 	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
-		k.y += (y - k.Size.Y) * m.Size.X
+		k.p.Y += (y - k.Size.Y) * m.Size.X
 		k.ialign.Y = m.Size.X
 	})
 }
 
+// Strokewidth sets the fill paint.
 func (wo *World) Fill(p nanovgo.Paint) (s Sorm) {
 	s = wo.newSorm()
 	s.tag = tagFill
@@ -73,6 +85,7 @@ func fillrun(wo *World, s, m *Sorm) {
 	})
 }
 
+// Strokewidth sets the stroke paint.
 func (wo *World) Stroke(p nanovgo.Paint) (s Sorm) {
 	s = wo.newSorm()
 	s.tag = tagStroke
@@ -87,6 +100,7 @@ func strokerun(wo *World, s, m *Sorm) {
 	})
 }
 
+// Strokewidth sets the stroke width.
 func (wo *World) Strokewidth(w float64) (s Sorm) {
 	s = wo.newSorm()
 	s.tag = tagStrokewidth
@@ -102,6 +116,8 @@ func strokewidthrun(wo *World, s, m *Sorm) {
 	})
 }
 
+// Identity gives a compound the key on which it can be retrieved from the layout tree on the
+// next event loop cycle.
 func (wo *World) Identity(key any) (s Sorm) {
 	s = wo.newSorm()
 	s.tag = tagIdentity
@@ -113,7 +129,7 @@ func identityrun(wo *World, s, m *Sorm) {
 	m.key = nil
 }
 
-// Cond adds an event callback to a Compound.
+// Cond adds an event callback to a compound.
 func (wo *World) Cond(f func(m Matcher)) (s Sorm) {
 	s = wo.newSorm()
 	s.tag = tagCond
@@ -174,7 +190,7 @@ func sourcerun(wo *World, s *Sorm, m *Sorm) {
 
 // Sink marks area of current compound as a drag sink.
 // When program receives Release(1) event with mouse cursor inside a sink,
-// it calls given function with a drag value.
+// it calls given function with the drag value.
 func (wo *World) Sink(f func(drop any)) (s Sorm) {
 	s = wo.newSorm()
 	s.tag = tagSink
@@ -187,9 +203,8 @@ func sinkrun(wo *World, s *Sorm, m *Sorm) {
 	m.sinkid = 0
 }
 
-// Hshrink is a modifier that makes negative horizontal values inside a compound without Hfollow or Vfollow to
-// be set not to horizontal limit, but to maximum horizontal value of objects with known size.
-// TODO Make description more readable.
+// Hshrink shrinks the horizontal size of a stretchy compound to the size of the
+// children with the maximum known horizontal size.
 func (wo *World) Hshrink() (s Sorm) {
 	s = wo.newSorm()
 	s.tag = tagHshrink
@@ -199,7 +214,7 @@ func hshrinkrun(wo *World, s *Sorm, m *Sorm) {
 	s.flags |= flagHshrink
 }
 
-// Vshrink is a modifier that works exactly like Hshrink, but for vertical sizes.
+// Vshrink works exactly like Hshrink, but for vertical sizes.
 func (wo *World) Vshrink() (s Sorm) {
 	s = wo.newSorm()
 	s.tag = tagVshrink
@@ -222,6 +237,7 @@ func scissorrun(wo *World, s *Sorm, m *Sorm) {
 // Limit limits the maximum compound size to specified limits.
 // If a given size is negative, it limits the corresponding size of a compound by
 // the rules of negative units for shapes.
+//
 // TODO Imaginary limits.
 func (wo *World) Limit(w, h float64) (s Sorm) {
 	s = wo.newSorm()
@@ -255,8 +271,8 @@ func (wo *World) Posttransform(x, y float64) (s Sorm) {
 	return
 }
 func posttransformrun(wo *World, c, m *Sorm) {
-	c.x += m.Size.X
-	c.y += m.Size.Y
+	c.p.X += m.Size.X
+	c.p.Y += m.Size.Y
 	// Because moves are inherited in a separate pass
 }
 
@@ -295,7 +311,7 @@ func (wo *World) Key(k any) (v *any) {
 	return
 }
 
-func (wo *World) DontDecimate() (s Sorm) {
+func (wo *World) DoNotDecimate() (s Sorm) {
 	s = wo.newSorm()
 	s.tag = tagDontDecimate
 	return

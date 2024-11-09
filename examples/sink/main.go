@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-gl/glfw/v3.3/glfw"
@@ -21,6 +22,10 @@ import (
 //go:embed okcomputer.jpg
 var _okcomputer []byte
 var okcomputer = bytes.NewBuffer(_okcomputer)
+
+//go:embed barkov.txt
+var _barkov []byte
+var barkov = strings.Split(string(_barkov), "\n")
 
 type Sorm = contraption.Sorm
 type World struct {
@@ -58,7 +63,7 @@ func main() {
 	// println(f.Captoem(53))
 	// wo.Vgo.CreateFontFromMemory("asdf", goregular.TTF, 0)
 
-	contraption.AddDragEffect[*float64](wo.World, func(interval [2]geom.Point, f *float64) Sorm {
+	contraption.AddDragEffect(wo.World, func(interval [2]geom.Point, f *float64) Sorm {
 		r := wo.Prevkey(Tag(f, 1)).Rectangle()
 		*f = (interval[1].X - r.Min.X) / r.Dx()
 		*f = max(0, min(*f, 1))
@@ -80,7 +85,7 @@ func main() {
 		wo.Root(
 			wo.Transform(geom.Scale2d(scale, scale)),
 			wo.Compound(
-				wo.Sequence(contraption.SliceSequence2(wo.Trace[:len(wo.Trace)-1], func(i int) contraption.Sorm {
+				wo.Sequence(contraption.SliceSequence2(wo.Trace[:len(wo.Trace)], func(i int) contraption.Sorm {
 					p := `#00000000`
 					h := complex128(1.0)
 					switch wo.Trace[i].E.(type) {
@@ -204,7 +209,7 @@ func (wo *World) Examples() Sorm {
 						wo.Rectangle(-1, -1),
 						wo.Rectangle(-2, -1),
 						wo.Compound(
-							wo.DontDecimate(),
+							wo.DoNotDecimate(),
 							wo.Vfollow(),
 							wo.Rectangle(-1, -1),
 							wo.Compound(
@@ -294,7 +299,12 @@ func (wo *World) Examples() Sorm {
 					wo.Compound(
 						wo.Vfollow(),
 						wo.Rectangle(100, 50).Fill(dark),
-						wo.Rectangle(100, 100).Fill(yellow)))
+						wo.Rectangle(100, 100).Fill(yellow),
+						wo.Compound(
+							wo.Hfollow(),
+							wo.Rectangle(50, 50).Fill(dark),
+							wo.Rectangle(50, 100).Fill(yellow),
+						)))
 			}),
 			wo.Example(`Illustration`, func() Sorm {
 				return wo.Compound(
@@ -302,6 +312,18 @@ func (wo *World) Examples() Sorm {
 					wo.Halign(numbox),
 					wo.Scissor(),
 					wo.Illustration(-1, -1, "zoom", okcomputer))
+			}),
+			wo.Example(`Scroll`, func() Sorm {
+				return wo.Compound(
+					wo.Limit(300, 100),
+					wo.Vfollow(),
+					wo.Scissor(),
+					wo.Sequence(contraption.SliceSequence(barkov, func(s string) contraption.Sorm {
+						return wo.Compound(
+							wo.Vfollow(),
+							wo.Text(8, s).Fill(hexpaint(`#000000`)),
+							wo.Void(0, 8))
+					})))
 			}),
 		))
 }

@@ -2,9 +2,7 @@ package contraption
 
 import "unicode/utf8"
 
-// Sequence is the thing that can generate elements for a scroll-enabled compound.
-//
-// All the logic to differentiate scroll's elements must be in returned Sorms.
+// Sequence is the thing that can generate elements for a compound.
 type Sequence interface {
 	Get(wo *World, j int, buf []Sorm) (n int)
 	Length(wo *World) int

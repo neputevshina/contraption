@@ -68,14 +68,14 @@ func (wo *World) generalNewText(font []byte, kind tagkind) func(size float64, st
 
 		s.vecfont = f
 		s.fontid = f.Vgoid
-		wo.Vgo.SetFontFaceID(s.fontid)
-		wo.Vgo.SetFontSize(float32(size))
-		_, abcd := wo.Vgo.TextBounds(0, 0, str)
-		_, space := wo.Vgo.TextBounds(0, 0, " ")
-		s.Size.X = float64(abcd[2]-abcd[0]) - float64(space[2]-space[0])
-		if s.Size.X < 0 {
-			s.Size.X = 0
-		}
+		// wo.Vgo.SetFontFaceID(s.fontid)
+		// wo.Vgo.SetFontSize(float32(size))
+		// _, abcd := wo.Vgo.TextBounds(0, 0, str)
+		// _, space := wo.Vgo.TextBounds(0, 0, " ")
+		// s.Size.X = float64(abcd[2]-abcd[0]) - float64(space[2]-space[0])
+		// if s.Size.X < 0 {
+		// 	s.Size.X = 0
+		// }
 		if kind == tagTopDownText || kind == tagBottomUpText {
 			s.Size.X, s.Size.Y = s.Size.Y, s.Size.X
 		}
@@ -95,10 +95,10 @@ func generaltextrun(kind tagkind) func(wo *World, s *Sorm) {
 		wo.Vgo.ResetTransform()
 		if horizontal {
 			// Adjust baseline so 0y0 is top left.
-			wo.Vgo.SetTransform(nanovgo.TranslateMatrix(float32(s.x), float32(s.y)+float32(s.Size.Y)))
+			wo.Vgo.SetTransform(nanovgo.TranslateMatrix(float32(s.p.X), float32(s.p.Y)+float32(s.Size.Y)))
 			wo.Vgo.SetFontSize(float32(s.Size.Y))
 		} else {
-			wo.Vgo.SetTransform(nanovgo.TranslateMatrix(float32(s.x), float32(s.y)))
+			wo.Vgo.SetTransform(nanovgo.TranslateMatrix(float32(s.p.X), float32(s.p.Y)))
 			if kind == tagTopDownText {
 				wo.Vgo.SetTransform(nanovgo.RotateMatrix(nanovgo.PI / 2))
 			} else if kind == tagBottomUpText {
@@ -108,7 +108,7 @@ func generaltextrun(kind tagkind) func(wo *World, s *Sorm) {
 		}
 		wo.Vgo.SetFontFaceID(s.fontid)
 		wo.Vgo.SetFillPaint(s.fill)
-		// println(s.key.(string), wo.vgo.CurrentTransform(), s.x, s.y, s.Size.X, s.Size.Y)
+		// println(s.key.(string), wo.vgo.CurrentTransform(), s.pos.X, s.pos.Y, s.Size.X, s.Size.Y)
 		wo.Vgo.Text(0, 0, s.key.(string))
 	}
 }
@@ -167,7 +167,7 @@ func vectortextrun(wo *World, s *Sorm) {
 	if s.fill != (nanovgo.Paint{}) || s.stroke != (nanovgo.Paint{}) {
 		wo.Vgo.BeginPath()
 	}
-	wo.Vgo.SetTransform(nanovgo.TranslateMatrix(float32(s.x), float32(s.y+s.Size.Y))) // Top left
+	wo.Vgo.SetTransform(nanovgo.TranslateMatrix(float32(s.p.X), float32(s.p.Y+s.Size.Y))) // Top left
 
 	MakealineReader(wo.Vgo, s.vecfont, s.Size.Y, s.key.(io.RuneScanner))
 
@@ -186,6 +186,7 @@ func vectortextrun(wo *World, s *Sorm) {
 
 }
 
+// Circle is a circle shape.
 func (wo *World) Circle(d float64) (s Sorm) {
 	s = wo.newSorm()
 	s.tag = tagCircle
@@ -196,7 +197,7 @@ func (wo *World) Circle(d float64) (s Sorm) {
 func circlerun(wo *World, s *Sorm) {
 	s.paint(wo, func() {
 		r := s.Size.X / 2
-		wo.Vgo.Circle(float32(s.x+r), float32(s.y+r), float32(r))
+		wo.Vgo.Circle(float32(s.p.X+r), float32(s.p.Y+r), float32(r))
 	})
 }
 
@@ -212,7 +213,7 @@ func (wo *World) Rectangle(w, h complex128) (s Sorm) {
 }
 func rectrun(wo *World, s *Sorm) {
 	s.paint(wo, func() {
-		wo.Vgo.Rect(float32(s.x), float32(s.y), float32(s.Size.X), float32(s.Size.Y))
+		wo.Vgo.Rect(float32(s.p.X), float32(s.p.Y), float32(s.Size.X), float32(s.Size.Y))
 	})
 }
 
@@ -229,7 +230,7 @@ func (wo *World) Roundrect(w, h complex128, r float64) (s Sorm) {
 }
 func roundrectrun(wo *World, s *Sorm) {
 	s.paint(wo, func() {
-		wo.Vgo.RoundedRect(float32(s.x), float32(s.y), float32(s.Size.X), float32(s.Size.Y), float32(s.r))
+		wo.Vgo.RoundedRect(float32(s.p.X), float32(s.p.Y), float32(s.Size.X), float32(s.Size.Y), float32(s.r))
 	})
 }
 
@@ -272,7 +273,7 @@ func equationrun(wo *World, s *Sorm) {
 	s.paint(wo, func() {
 		a := wo.eqnCache[s.key]
 		wo.Vgo.ResetTransform()
-		wo.Vgo.SetTransform(nanovgo.TranslateMatrix(float32(s.x), float32(s.y)))
+		wo.Vgo.SetTransform(nanovgo.TranslateMatrix(float32(s.p.X), float32(s.p.Y)))
 		wo.Vgo.MoveTo(float32(a[0].X), float32(a[0].Y))
 		for i := range a {
 			if i == 0 {
@@ -299,7 +300,7 @@ func canvasrun(wo *World, s *Sorm) {
 
 	vgo.Save()
 	if s.r > 0 {
-		vgo.SetTransform(geom2nanovgo(s.m.Translate(s.x, s.y)))
+		vgo.SetTransform(geom2nanovgo(s.m.Translate(s.p.X, s.p.Y)))
 	}
 	if s.fill != (nanovgo.Paint{}) {
 		vgo.SetFillPaint(s.fill)
@@ -308,13 +309,13 @@ func canvasrun(wo *World, s *Sorm) {
 		vgo.SetStrokePaint(s.stroke)
 	}
 	vgo.SetStrokeWidth(s.strokew)
-	s.canvas(vgo, s.m, geom.Rect(s.x, s.y, s.x+s.Size.X, s.y+s.Size.Y))
+	s.canvas(vgo, s.m, geom.Rect(s.p.X, s.p.Y, s.p.X+s.Size.X, s.p.Y+s.Size.Y))
 	vgo.Restore()
 }
 
 // Sequence transforms external data to stream of shapes.
 //
-// Modifiers in Sequence right now are ignored, but later can trigger a panic.
+// Modifiers in Sequence right now are ignored, but can trigger a panic in future versions.
 func (wo *World) Sequence(q Sequence) (s Sorm) {
 	s = wo.newSorm()
 	s.tag = tagSequence
@@ -384,13 +385,12 @@ func (wo *World) Illustration(w, h complex128, mode string, src io.Reader) (s So
 
 	return s
 }
-
 func illustrationrun(wo *World, s *Sorm) {
 	vgo := wo.Vgo
 
 	vgo.Save()
 
-	vgo.SetTransform(geom2nanovgo(geom.Translate2d(s.x, s.y)))
+	vgo.SetTransform(geom2nanovgo(geom.Translate2d(s.p.X, s.p.Y)))
 
 	u, ok := wo.images[s.key.(io.Reader)]
 	if !ok {

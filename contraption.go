@@ -387,6 +387,12 @@ type World struct {
 	images map[io.Reader]imagestruct
 }
 
+type imagestruct struct {
+	gen     int
+	texid   int
+	origsiz geom.Point
+}
+
 func AddDragEffect[T any](wo *World, convert func(interval [2]geom.Point, drag T) Sorm) {
 	var z T
 	wo.dragEffects[typeof(z)] = func(interval [2]geom.Point, drag any) Sorm {
@@ -400,31 +406,26 @@ func (wo *World) ResetDragEffects() {
 	}
 }
 
-type imagestruct struct {
-	gen     int
-	texid   int
-	origsiz geom.Point
-}
-
 type Sorm struct {
-	z, z2, i              int
-	tag                   tagkind
-	flags                 flagval
-	Size, l, add          geom.Point
-	knowns, props, eprops geom.Point
-	ialign                geom.Point
-	r, x, y               float64
-	m, prem               geom.Geom
-	aligner               alignerkind
+	z, z2, i, pi int
+	tag          tagkind
+	flags        flagval
+
+	Size, p, l            point
+	knowns, props, eprops point
+	add, ialign           point
+
+	r       float64
+	m, prem geom.Geom
+	aligner alignerkind
 	kidsl, kidsr,
 	modsl, modsr,
 	presl, presr int
 
 	index *Index
 
-	// TODO Essentially, this is always equal to (0, 0, wl, hl) when unscaled.
-	//	Makes sense to remove wl and hl and only use this.
-	scissor geom.Rectangle
+	scissori int
+	scissor  geom.Rectangle
 
 	fill    nanovgo.Paint
 	stroke  nanovgo.Paint
@@ -536,9 +537,9 @@ func (s Sorm) String() string {
 	}
 	var vals string
 	if s.tag < 0 {
-		vals = fmt.Sprint(f(s.Size.X), ", ", f(s.Size.Y), ", ", f(s.x), ", ", f(s.y), ", _", f(s.l.X), ", _", f(s.l.Y))
+		vals = fmt.Sprint(f(s.Size.X), ", ", f(s.Size.Y), ", ", f(s.p.X), ", ", f(s.p.Y), ", _", f(s.l.X), ", _", f(s.l.Y))
 	} else {
-		vals = fmt.Sprint(f(s.Size.X), "×", f(s.Size.Y), ", ", f(s.x), "y", f(s.y), ", ↓", f(s.l.X), "×", f(s.l.Y), " ", color(p.innerColor))
+		vals = fmt.Sprint(f(s.Size.X), "×", f(s.Size.Y), ", ", f(s.p.X), "y", f(s.p.Y), ", ↓", f(s.l.X), "×", f(s.l.Y), " ", color(p.innerColor))
 	}
 	key := cond(s.key != nil, fmt.Sprint(" [", s.key, "]"), "")
 	ovrx := cond(s.flags&flagOvrx > 0, "↑X", "  ")
@@ -567,8 +568,11 @@ func (s Sorm) String() string {
 
 func (s Sorm) decimate() Sorm {
 	// FIXME Decimation is now done inside layout.
-	s.x = math.Floor(s.x)
-	s.y = math.Floor(s.y)
+	if s.flags&flagDontDecimate > 0 {
+		return s
+	}
+	s.p.X = math.Floor(s.p.X)
+	s.p.Y = math.Floor(s.p.Y)
 	s.Size.X = math.Ceil(s.Size.X)
 	s.Size.Y = math.Ceil(s.Size.Y)
 	return s
@@ -687,7 +691,7 @@ func (s Sorm) Resize(x, y float64) Sorm {
 }
 
 func (s Sorm) Rectangle() geom.Rectangle {
-	return geom.Rect(s.x, s.y, s.x+s.Size.X, s.y+s.Size.Y)
+	return geom.Rect(s.p.X, s.p.Y, s.p.X+s.Size.X, s.p.Y+s.Size.Y)
 }
 
 // Cat returns a Compound from two Sorm sources.
@@ -862,7 +866,7 @@ type kiargs struct {
 	notscissormark bool
 }
 
-func (s *Sorm) kidsiter(wo *World, a kiargs, f func(*Sorm)) {
+func (s *Sorm) kidsiter(wo *World, a kiargs, f func(k *Sorm)) {
 	// TODO Idea: take a limit in kidsiter, and if it is scissored, stop iteration when over it.
 	// It should work since scissored compounds can't stretch kids.
 	if s.tag == tagSequence {
@@ -941,9 +945,43 @@ out:
 	}
 }
 
+func (wo *World) topbreadthiter(pool []Sorm, f func(s, _ *Sorm)) {
+	for i := len(pool) - 1; i >= 0; i-- {
+		s := &pool[i]
+		if s.tag == tagSequence {
+			p := wo.beginvirtual()
+			pool := wo.auxpool[s.kidsl:s.kidsr]
+			for i := len(pool) - 1; i >= 0; i-- {
+				s := &pool[i]
+				f(s, s)
+			}
+			wo.endvirtual(p)
+		} else {
+			f(s, s)
+		}
+	}
+}
+
+func (wo *World) bottombreadthiter(pool []Sorm, f func(s, _ *Sorm)) {
+	for i := 0; i < len(pool); i++ {
+		s := &pool[i]
+		if s.tag == tagSequence {
+			p := wo.beginvirtual()
+			pool := wo.auxpool[s.kidsl:s.kidsr]
+			for i := len(pool) - 1; i >= 0; i-- {
+				s := &pool[i]
+				f(s, s)
+			}
+			wo.endvirtual(p)
+		} else {
+			f(s, s)
+		}
+	}
+}
+
 // If a Compound has no aligner set (“stack” layout)
 func noaligner(wo *World, c *Sorm) {
-	minp := Point{}
+	minp := point{}
 	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
 		c.Size.X = max(c.Size.X, k.Size.X)
 		c.Size.Y = max(c.Size.Y, k.Size.Y)
@@ -992,16 +1030,22 @@ func hfollowaligner(wo *World, c *Sorm) {
 	sequencealigner(wo, c, true)
 }
 
+func swapxy(p *point) {
+	p.X, p.Y = p.Y, p.X
+}
+
 func axis(h bool) (begin, end func(k *Sorm)) {
 	swap := func(k *Sorm) {
 		if h {
-			// Y is main axis, X is secondary.
-			k.Size.X, k.Size.Y = k.Size.Y, k.Size.X
-			k.x, k.y = k.y, k.x
-			k.l.X, k.l.Y = k.l.Y, k.l.X
-			k.props.X, k.props.Y = k.props.Y, k.props.X
-			k.eprops.X, k.eprops.Y = k.eprops.Y, k.eprops.X
-			k.knowns.X, k.knowns.Y = k.knowns.Y, k.knowns.X
+			swapxy(&k.Size)
+			swapxy(&k.p)
+			swapxy(&k.l)
+			swapxy(&k.props)
+			swapxy(&k.eprops)
+			swapxy(&k.knowns)
+
+			swapxy(&k.scissor.Min)
+			swapxy(&k.scissor.Max)
 		}
 	}
 	return swap, swap
@@ -1053,18 +1097,19 @@ func sequencealigner(wo *World, c *Sorm, h bool) {
 	// lay out the sequence then.
 	y := 0.0
 	beginaxis(c)
-	r := .0
+	e := .0
 	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
 		stretch := false
 
 		beginaxis(k)
+		// Y is the main axis, X is perpendicular.
 		if k.eprops.Y > 0 {
 			// max() means we don't stretch if we're out of limit.
 			k.Size.Y = max(0, (c.l.Y-c.knowns.Y)/c.props.Y*k.eprops.Y)
-			// Round the lengths and sizes to the nearest integer.
+			// Round lengths and sizes to the nearest integer.
 			// TODO Accumulate error in kids and try to make it strobe less.
 			if c.flags&flagDecimate > 0 || !(c.flags&flagDontDecimate > 0) {
-				r += k.Size.Y - math.Round(k.Size.Y)
+				e += k.Size.Y - math.Round(k.Size.Y)
 				k.Size.Y = math.Round(k.Size.Y)
 			}
 			k.l.Y = k.Size.Y
@@ -1082,12 +1127,12 @@ func sequencealigner(wo *World, c *Sorm, h bool) {
 		}
 
 		beginaxis(k)
-		k.y = y
+		k.p.Y = y
 		y += k.Size.Y
 		c.Size.X = max(c.Size.X, k.Size.X)
 		endaxis(k)
 	})
-	c.Size.Y = y + r
+	c.Size.Y = y + e
 	if c.flags&flagDecimate > 0 || !(c.flags&flagDontDecimate > 0) {
 		c.Size.Y = math.Round(c.Size.Y)
 	}
@@ -1116,8 +1161,12 @@ func (wo *World) apply(p *Sorm, c *Sorm) {
 		// 	So this can't influence limits at later stages.
 		k.l.X = c.l.X
 		k.l.Y = c.l.Y
-		// Inherit scissors and apply scale to them.
-		k.scissor = c.scissor
+		// Inherit scissor.
+		if c.flags&flagScissor > 0 {
+			k.scissori = c.i
+		} else {
+			k.scissori = c.scissori
+		}
 
 		// Apply scale.
 		ns := k.m.ApplyPt(geom.Pt(k.Size.X, k.Size.Y))
@@ -1146,11 +1195,11 @@ func (wo *World) apply(p *Sorm, c *Sorm) {
 		// Apply size override to c if it has one.
 		if k.flags&flagOvrx > 0 {
 			c.Size.X = k.Size.X
-			c.x = min(c.x, -k.x)
+			c.p.X = min(c.p.X, -k.p.X)
 		}
 		if k.flags&flagOvry > 0 {
 			c.Size.Y = k.Size.Y
-			c.y = min(c.y, -k.y)
+			c.p.Y = min(c.p.Y, -k.p.Y)
 		}
 	})
 
@@ -1177,7 +1226,6 @@ func (wo *World) resolvepremods(_ *Sorm, c *Sorm) {
 	}
 
 	// Defer scissored compounds for another pass.
-	// println(c.flags&flagScissor > 0)
 	// if c.flags&flagScissor > 0 && !wo.scissoring {
 	// 	wo.scissored = append(wo.scissored, c)
 	// 	return
@@ -1189,36 +1237,36 @@ func (wo *World) resolvepremods(_ *Sorm, c *Sorm) {
 		k.flags |= c.flags & flagDontDecimate
 		k.flags |= c.flags & flagDecimate
 		wo.resolvepremods(c, k)
+		// Resolve sprite text widths based off a real font size
+		// TODO Broken, probably because of incorrect scaling with matrices
+		// TODO Vertical
+		// TODO flagNonlinear — set the size of an element only after setting up the matrix.
+		//	Another element with this property is Equation.
+		if k.tag == tagText {
+			s := k
+			wo.Vgo.SetFontFaceID(s.fontid)
+			wo.Vgo.SetFontSize(float32(k.Size.Y))
+			_, abcd := wo.Vgo.TextBounds(0, 0, s.key.(string))
+			_, space := wo.Vgo.TextBounds(0, 0, " ")
+			s.Size.X = float64(abcd[2]-abcd[0]) - float64(space[2]-space[0])
+			if s.Size.X < 0 {
+				s.Size.X = 0
+			}
+		}
 	})
 }
 
 func (wo *World) layout(pool []Sorm, root *Sorm) {
 	// Resolve premodifiers and stack negative sizes.
 	wo.resolvepremods(nil, root)
-	for i := 0; i < len(pool); i++ {
-		s := &pool[i]
-		if s.tag == tagSequence {
-			p := wo.beginvirtual()
-			pool := wo.auxpool[s.kidsl:s.kidsr]
-			for i := len(pool) - 1; i >= 0; i-- {
-				s := &pool[i]
-				switch s.aligner {
-				case alignerVfollow:
-					sequencedivider(wo, s, false)
-				case alignerHfollow:
-					sequencedivider(wo, s, true)
-				}
-			}
-			wo.endvirtual(p)
-		} else {
-			switch s.aligner {
-			case alignerVfollow:
-				sequencedivider(wo, s, false)
-			case alignerHfollow:
-				sequencedivider(wo, s, true)
-			}
+	wo.bottombreadthiter(pool, func(s, _ *Sorm) {
+		switch s.aligner {
+		case alignerVfollow:
+			sequencedivider(wo, s, false)
+		case alignerHfollow:
+			sequencedivider(wo, s, true)
 		}
-	}
+	})
 
 	if wo.Events.Match(`Press(F4)`) {
 		println("@ Tree before applying stretches")
@@ -1233,11 +1281,11 @@ func (wo *World) layout(pool []Sorm, root *Sorm) {
 	// TODO Maybe wo.apply should do it? Kind of makes more sense.
 	// The reason it is separated is because we don't know how absolute component
 	// sizes and coordinates till the very end.
-	inh := func(c, efc *Sorm) {
+	wo.topbreadthiter(pool, func(c, efc *Sorm) {
 		c.kidsiter(wo, kiargs{}, func(k *Sorm) {
-			k.x += efc.x
-			k.y += efc.y
-			k.scissor = k.scissor.Add(geom.Pt(efc.x, efc.y))
+			k.p.X += efc.p.X
+			k.p.Y += efc.p.Y
+			k.scissor = k.scissor.Add(geom.Pt(efc.p.X, efc.p.Y))
 			if k.fill == (nanovgo.Paint{}) {
 				k.fill = efc.fill
 			}
@@ -1248,21 +1296,14 @@ func (wo *World) layout(pool []Sorm, root *Sorm) {
 				k.strokew = efc.strokew
 			}
 		})
-	}
-	for i := len(pool) - 1; i >= 0; i-- {
-		s := &pool[i]
-		if s.tag == tagSequence {
-			p := wo.beginvirtual()
-			pool := wo.auxpool[s.kidsl:s.kidsr]
-			for i := len(pool) - 1; i >= 0; i-- {
-				s := &pool[i]
-				inh(s, s)
-			}
-			wo.endvirtual(p)
-		} else {
-			inh(s, s)
+	})
+
+	// Apply scissors.
+	wo.bottombreadthiter(pool, func(s, _ *Sorm) {
+		if s.scissori > 0 {
+			s.scissor = pool[s.scissori].Rectangle()
 		}
-	}
+	})
 
 	// Print tree for debug. Do it before sorting.
 	if wo.f1 {
@@ -1296,8 +1337,12 @@ func (wo *World) Develop() {
 
 	pool := wo.pool[0:wo.rend]
 
-	for i := range pool {
-		pool[i].i = i
+	for i := len(pool) - 1; i >= 0; i-- {
+		s := &pool[i]
+		s.i = i
+		s.kidsiter(wo, kiargs{}, func(k *Sorm) {
+			k.pi = s.i
+		})
 	}
 
 	wo.layout(pool, last(pool))
@@ -1309,11 +1354,12 @@ func (wo *World) Develop() {
 	slices.SortFunc(pool, func(a, b Sorm) int {
 		return a.z - b.z
 	})
+	// After this point, (*Sorm).kidsiter won't work because indices are broken.
 
 	// Apply conditional paints, match drag-and-drop events.
 	for i := len(pool) - 1; i >= 0; i-- {
 		s := &pool[i]
-		r := geom.Rect(s.x, s.y, s.x+s.Size.X, s.y+s.Size.Y)
+		r := geom.Rect(s.p.X, s.p.Y, s.p.X+s.Size.X, s.p.Y+s.Size.Y)
 		if s.condfillstroke != nil {
 			s.fill, s.stroke = s.condfillstroke(r)
 		}
@@ -1367,15 +1413,15 @@ func (wo *World) Develop() {
 		default:
 			// This fix is needed by every vector drawing library i know.
 			// And i only know Nanovg and Love2d.
-			s.x -= 0.5
-			s.y -= 0.5
+			s.p.X -= 0.5
+			s.p.Y -= 0.5
 		case tagTopDownText:
 			fallthrough
 		case tagBottomUpText:
 			fallthrough
 		case tagText:
-			// s.x -= 1
-			// s.y -= 1
+			// s.pos.X -= 1
+			// s.pos.Y -= 1
 
 		case tagVectorText:
 		case tagCanvas:
@@ -1417,14 +1463,35 @@ func (wo *World) Develop() {
 				continue
 			}
 			s := s.decimate()
-			s.x -= 0.5
-			s.y -= 0.5
+			s.p.X -= 0.5
+			s.p.Y -= 0.5
 			if s.tag >= 0 {
-				wo.Vgo.Rect(float32(s.x), float32(s.y), float32(s.Size.X), float32(s.Size.Y))
+				wo.Vgo.Rect(float32(s.p.X), float32(s.p.Y), float32(s.Size.X), float32(s.Size.Y))
 			}
 		}
 		vgo.ClosePath()
 		vgo.Stroke()
+
+		vgo.SetStrokeWidth(0)
+		vgo.SetFillPaint(hexpaint(`#ff000020`))
+		vgo.BeginPath()
+		for _, s := range pool {
+			if s.scissori == 0 {
+				continue
+			}
+			if s.Size.Y < .5 && s.Size.X < .5 {
+				continue
+			}
+			s := s.decimate()
+			s.p.X -= 0.5
+			s.p.Y -= 0.5
+			if s.tag >= 0 {
+				wo.Vgo.Rect(float32(s.scissor.Min.X), float32(s.scissor.Min.Y),
+					float32(s.scissor.Dx()), float32(s.scissor.Dy()))
+			}
+		}
+		vgo.ClosePath()
+		vgo.Fill()
 	}
 
 	wo.recorder()
