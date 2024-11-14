@@ -224,14 +224,14 @@ func vshrinkrun(wo *World, s *Sorm, m *Sorm) {
 	s.flags |= flagVshrink
 }
 
-// Scissor limits the painting area of a Compound to its Limit.
-func (wo *World) Scissor() (s Sorm) {
+// Crop limits the painting area of a compound to its limit.
+func (wo *World) Crop() (s Sorm) {
 	s = wo.newSorm()
-	s.tag = tagScissor
+	s.tag = tagCrop
 	return
 }
-func scissorrun(wo *World, s *Sorm, m *Sorm) {
-	s.flags |= flagScissor
+func croprun(wo *World, s *Sorm, m *Sorm) {
+	s.flags |= flagCrop
 }
 
 // Limit limits the maximum compound size to specified limits.
@@ -327,4 +327,29 @@ func (wo *World) Decimate() (s Sorm) {
 }
 func decimaterun(wo *World, c, m *Sorm) {
 	c.flags |= flagDecimate
+}
+
+func (wo *World) Hscroll(idx *Index, du float64) (s Sorm) {
+	// TODO Smooth scrolling, rate limiting/exponential decay.
+	s = wo.newSorm()
+	s.tag = tagHscroll
+	s.idx = idx
+	return
+}
+func hscrollrun(wo *World, c, m *Sorm) {
+	c.idx = m.idx
+}
+
+func (wo *World) Vscroll(idx *Index, du float64) (s Sorm) {
+	s = wo.newSorm()
+	s.tag = tagVscroll
+	s.idx = idx
+	return
+}
+func vscrollrun(wo *World, c, m *Sorm) {
+	// NOTE Vscroll is a premodifier, they are sorted by tag before execution.
+	if c.idx != nil && c.idx != m.idx {
+		panic(`contraption: different Indexes in Hscroll and Vscroll on the same compound (id ` + sprint(c.i) + `)`)
+	}
+	c.idx = m.idx
 }

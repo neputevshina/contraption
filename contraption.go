@@ -3,6 +3,40 @@
 // A good user interface framework must be an engine for a word processing game.
 //
 // TODO:
+//	- Anchors
+//		- For Curve aligner and other CAD-like features
+//		- Are just numbers
+//	- Textbox behaviour
+//		- https://rxi.github.io/textbox_behaviour.html
+//		- Implemented over Sequence
+//			- TextSequence interface { Backspace(i, j), Delete(i, j), Insert(i, j), Copy(i, j) etc }
+//		- Sequence cropping will provide efficiency.
+//		- Editable() modifier
+//			- Aligner and Align will change the behavior.
+//		- Elements that are not in TextSequences can not be edited
+//			- But can be copied.
+//	- Activator stack
+//	- Word layout
+//		- Together with stretch creates a flexbox-like system
+//		- Together with laziness creates a universal layout framework, capable of word processing
+//		- Will be used for text.
+//		- func Hwords(perline func() Sorm) Sorm
+//		- func Vwords(perline func() Sorm) Sorm
+//		- Secondary axis limits influenced by perpendicular Void
+//		- wo.Text(io.RuneScanner) []Sorm
+//			- Returns Knuth-Plass-ready stream of boxes, Glues and Penalties.
+//			? How to insert anything in between symbols?
+//				? RuneScanner splitter?
+//		- wo.Cap(float64) (can't be negative)
+//		- wo.Lsp(float64)
+//		- Knuth-Plass
+//			? Interpret negative sizes as glue.
+// 			- func Hknuth(perline func() Sorm) Sorm
+// 			- func Vknuth(perline func() Sorm) Sorm
+// 			- func Glue(width, minus, plus float64) Sorm // Analogous to wo.Void() but undirectional.
+// 			- func Penalty(replacewith func() Sorm, penalty float64) Sorm
+//				- Alt: Penalty as a builder on a target shape
+//			- Void(0, y) is already a “strut”
 //	- Investigate better ways to specify size values
 //		- Current: -1+20i — complex128, + concrete, - stretch, imaginary adds concrete change to stretchy
 //			+ Almost transparent
@@ -17,6 +51,8 @@
 //			+ Can be extendable by user
 //			+ Parsing can be quite fast if done right
 //			- Construction from variables requires strconv
+//				+ Or with printf-like construction: Sz("$dp+$cm-20%/$s", 1, 8, 1)
+//					- But this is equivalent to builders and not interesting
 //		- [N]int
 //			+ Easily extendable
 //			- Looks gross and is not ergonomical
@@ -32,8 +68,8 @@
 //		- 16 elements on complex and large items
 //		- 128 on moderately complex and medium-sized items (messages in chat)
 //		- 1024 on small and simple elements (rows of data, histograms)
-//	- Round shape sizes inside aligners.
-//		- Noround modifier
+//	+ Round shape sizes inside aligners.
+//		+ Noround modifier
 //		? Smooth rounding hint — don't round if in motion
 //		- Probably when implementing this will be the best time to go for
 //			geom.Rect for storing xywh
@@ -69,8 +105,6 @@
 //		- Easy insertion of Sorms between the data. See https://www.youtube.com/watch?v=Cz0OvnR_aoY.
 //			- Probably very easy to implement by simply slicing the data.
 //		- Why? Try to display STFT of a music file using Matplotlib, then rescale the window. Enjoy the delay.
-//	- Text area
-//		- https://rxi.github.io/textbox_behaviour.html
 //	+ Sequence must be a special shape that pastes Sorms inside a compound, not being compound itself
 //		- So wo.Text(io.RuneReader) could be Sequence
 //		+ Not clear how to reuse memory of pools in this case
@@ -107,28 +141,7 @@
 //		- Union()
 //		- Subtraction()
 //		- Difference()
-//	- Word layout
-//		- Together with stretch creates a flexbox-like system
-//		- Together with laziness creates a universal layout framework, capable of word processing
-//		- Will be used for text.
-//		- func Hwords(perline func() Sorm) Sorm
-//		- func Vwords(perline func() Sorm) Sorm
-//		- Secondary axis limits influenced by perpendicular Void
-//		- wo.Text(io.RuneScanner) []Sorm
-//			- Returns Knuth-Plass-ready stream of boxes, Glues and Penalties.
-//			? How to insert anything in between symbols?
-//				? RuneScanner splitter?
-//		- wo.Cap(float64) (can't be negative)
-//		- wo.Lsp(float64)
-//		- Knuth-Plass
-//			? Interpret negative sizes as glue.
-// 			- func Hknuth(perline func() Sorm) Sorm
-// 			- func Vknuth(perline func() Sorm) Sorm
-// 			- func Glue(width, minus, plus float64) Sorm // Analogous to wo.Void() but undirectional.
-// 			- func Penalty(replacewith func() Sorm, penalty float64) Sorm
-//				- Alt: Penalty as a builder on a target shape
-//			- Void(0, y) is already a “strut”
-//	- Tiling
+//	- Sprite tiling
 //		- Tiled rect
 //		- Tiled path
 //	- Localization and internationalization guideline
@@ -141,7 +154,6 @@
 //	- func Target(onScreen *bool) Sorm
 //	- Commenting the interface
 //	- Rotations
-//	- Activator stack
 //	~ Move -> Transform
 //	+ Scale -> Pretransform
 //	± Click and and get every line of code that tried to paint over that pixel.
@@ -158,7 +170,7 @@
 // 	+ Depth-first layout
 //		+ Stretch
 //		+ Draw order is not dependent on call order
-//		+ Scissor
+//		+ Scissor (wo.Crop())
 //	+ Autovoid container -> Between modifier
 //	+ Fix scale modifier
 //	+ wo.Max() (wo.Limit())
@@ -199,7 +211,7 @@ const (
 	flagOvrx
 	flagOvry
 	flagBetweener
-	flagScissor
+	flagCrop
 	flagMark
 	flagFindme
 	flagHshrink
@@ -210,7 +222,7 @@ const (
 	flagBreakIteration
 	flagNegativeOvrx
 	flagNegativeOvry
-	flagIteratedNotScissor
+	flagNotCropped
 	flagIteratedScissor
 	flagDontDecimate
 	flagDecimate
@@ -255,12 +267,14 @@ const (
 	tagScroll
 	tagSource
 	tagSink
+	tagHscroll
+	tagVscroll
 )
 const (
 	_ tagkind = -100 - iota
 	tagPosttransform
 	tagTransform
-	tagScissor
+	tagCrop
 	tagHshrink
 	tagVshrink
 	tagLimit // Limit must be executed after update of a matrix, but before aligners, because it influences size.
@@ -314,7 +328,7 @@ func init() {
 
 	preActions[-100-tagPosttransform] = posttransformrun
 	preActions[-100-tagTransform] = transformrun
-	preActions[-100-tagScissor] = scissorrun
+	preActions[-100-tagCrop] = croprun
 	preActions[-100-tagVfollow] = vfollowrun
 	preActions[-100-tagHfollow] = hfollowrun
 	preActions[-100-tagHshrink] = hshrinkrun
@@ -381,8 +395,8 @@ type World struct {
 
 	alloc func(n int) (left, right int)
 
-	scissored  []*Sorm
-	scissoring bool
+	cropped  []*Sorm
+	cropping int
 
 	images map[io.Reader]imagestruct
 }
@@ -422,10 +436,11 @@ type Sorm struct {
 	modsl, modsr,
 	presl, presr int
 
-	index *Index
+	idx     *Index
+	scrolld point
 
-	scissori int
-	scissor  geom.Rectangle
+	cropi int
+	cropr geom.Rectangle
 
 	fill    nanovgo.Paint
 	stroke  nanovgo.Paint
@@ -553,6 +568,10 @@ func (s Sorm) String() string {
 	} else {
 		z = sprint(s.z)
 	}
+	clip := " "
+	if s.flags&flagNotCropped == 0 && s.tag >= 0 {
+		clip = "C"
+	}
 
 	d := func(i int) int {
 		return int(math.Floor(math.Log10(float64(i))))
@@ -561,14 +580,14 @@ func (s Sorm) String() string {
 	if seq == "S" {
 		digits += 2 // "[" and "]"
 	}
-	scissor := cond(s.scissor.Dx() > 0 && s.scissor.Dy() > 0, fmt.Sprint(s.scissor), "{/}")
+	crop := cond(s.cropr.Dx() > 0 && s.cropr.Dy() > 0, fmt.Sprint(s.cropr), "{/}")
 
-	return fmt.Sprint(z, strings.Repeat(" ", max(0, 10-digits)), seq, ovrx, ovry, btw, " ", s.tag.String(), " ", vals, ` `, s.props, ` `, scissor, key) //, " ", s.callerfile, ":", s.callerline)
+	return fmt.Sprint(z, strings.Repeat(" ", max(0, 10-digits)), seq, clip, ovrx, ovry, btw, " ", s.tag.String(), " ", vals, ` `, s.props, ` `, crop, key) //, " ", s.callerfile, ":", s.callerline)
 }
 
 func (s Sorm) decimate() Sorm {
 	// FIXME Decimation is now done inside layout.
-	if s.flags&flagDontDecimate > 0 {
+	if !s.decimated() {
 		return s
 	}
 	s.p.X = math.Floor(s.p.X)
@@ -576,6 +595,10 @@ func (s Sorm) decimate() Sorm {
 	s.Size.X = math.Ceil(s.Size.X)
 	s.Size.Y = math.Ceil(s.Size.Y)
 	return s
+}
+
+func (s *Sorm) decimated() bool {
+	return s.flags&flagDecimate > 0 || !(s.flags&flagDontDecimate > 0)
 }
 
 // BaseWorld returns itself.
@@ -602,6 +625,16 @@ func (wo *World) newSorm() (s Sorm) {
 		s.flags = flagSequenceMark
 	}
 	return
+}
+
+func (wo *World) allowed(s *Sorm) bool {
+	if s.flags&flagNotCropped > 0 && wo.cropping == 1 {
+		return false
+	}
+	if s.flags&flagNotCropped == 0 && wo.cropping == 0 {
+		return false
+	}
+	return true
 }
 
 func (wo *World) Prevkey(key any) Sorm {
@@ -861,33 +894,17 @@ func (wo *World) endvirtual(pool []Sorm) {
 }
 
 type kiargs struct {
-	i              Index
-	a              alignerkind
-	notscissormark bool
+	i         Index
+	a         alignerkind
+	firstloop bool
 }
 
 func (s *Sorm) kidsiter(wo *World, a kiargs, f func(k *Sorm)) {
-	// TODO Idea: take a limit in kidsiter, and if it is scissored, stop iteration when over it.
-	// It should work since scissored compounds can't stretch kids.
+	// TODO Idea: take a limit in kidsiter, and if it is cropped, stop iteration when over it.
+	// It should work since cropped compounds can't stretch kids.
 	if s.tag == tagSequence {
 		return
 	}
-
-	// if s.flags&flagScissor > 0 && !wo.scissoring {
-	// 	return
-	// }
-
-	// mode := func(k *Sorm) bool {
-	// 	if !wo.scissoring && k.flags&flagIteratedScissor == 0 {
-	// 		k.flags |= flagIteratedNotScissor
-	// 		return true
-	// 	}
-	// 	if wo.scissoring && k.flags&flagIteratedNotScissor == 0 {
-	// 		k.flags |= flagIteratedScissor
-	// 		return true
-	// 	}
-	// 	return false
-	// }
 
 	kids := wo.pool[s.kidsl:s.kidsr]
 out:
@@ -900,7 +917,7 @@ out:
 				args := wo.tmpalloc(q.Length(wo))
 				reall := len(wo.auxpool)
 
-				// Treat the aux pool as a main pool and a sequence as a root compound.
+				// Treat the aux pool as a main pool and the sequence as a root compound.
 				pop := wo.beginvirtual()
 				wo.prefix = k.z
 				q.Get(wo, i, args[:])
@@ -930,18 +947,12 @@ out:
 				pop := wo.beginvirtual()
 				f(k) // (1)
 				wo.endvirtual(pop)
-				if a.notscissormark { // (3)
-					k.flags |= flagIteratedNotScissor
-				}
 				if k.flags&flagBreakIteration > 0 { // (2)
 					break out
 				}
 			}
 		} else {
-			f(k)                  // (1)
-			if a.notscissormark { // (3)
-				k.flags |= flagIteratedNotScissor
-			}
+			f(k)                                // (1)
 			if k.flags&flagBreakIteration > 0 { // (2)
 				break out
 			}
@@ -950,35 +961,39 @@ out:
 }
 
 func (wo *World) topbreadthiter(pool []Sorm, f func(s, _ *Sorm)) {
-	for i := len(pool) - 1; i >= 0; i-- {
-		s := &pool[i]
-		if s.tag == tagSequence {
-			p := wo.beginvirtual()
-			pool := wo.auxpool[s.kidsl:s.kidsr]
-			for i := len(pool) - 1; i >= 0; i-- {
-				s := &pool[i]
-				f(s, s)
-			}
-			wo.endvirtual(p)
-		} else {
-			f(s, s)
-		}
-	}
+	wo.breadthiter(pool, f, false)
 }
 
 func (wo *World) bottombreadthiter(pool []Sorm, f func(s, _ *Sorm)) {
-	for i := range pool {
+	wo.breadthiter(pool, f, true)
+}
+
+func (wo *World) breadthiter(pool []Sorm, f func(s, _ *Sorm), bottomup bool) {
+	z := func(pool []Sorm) int { return len(pool) - 1 }
+	p := func(i int, _ []Sorm) bool { return i >= 0 }
+	d := -1
+	if bottomup {
+		z = func(_ []Sorm) int { return 0 }
+		p = func(i int, pool []Sorm) bool { return i < len(pool) }
+		d = +1
+	}
+
+	for i := z(pool); p(i, pool); i += d {
 		s := &pool[i]
 		if s.tag == tagSequence {
-			p := wo.beginvirtual()
+			v := wo.beginvirtual()
 			pool := wo.auxpool[s.kidsl:s.kidsr]
-			for i := range pool {
-				s := &pool[i]
+			for j := z(pool); p(j, pool); j += d {
+				s := &pool[j]
+				if wo.allowed(s) {
+					f(s, s)
+				}
+			}
+			wo.endvirtual(v)
+		} else {
+			if wo.allowed(s) {
 				f(s, s)
 			}
-			wo.endvirtual(p)
-		} else {
-			f(s, s)
 		}
 	}
 }
@@ -1027,11 +1042,11 @@ func noaligner(wo *World, c *Sorm) {
 }
 
 func vfollowaligner(wo *World, c *Sorm) {
-	sequencealigner(wo, c, false)
+	followaligner(wo, c, false)
 }
 
 func hfollowaligner(wo *World, c *Sorm) {
-	sequencealigner(wo, c, true)
+	followaligner(wo, c, true)
 }
 
 func swapxy(p *point) {
@@ -1048,8 +1063,8 @@ func axis(h bool) (begin, end func(k *Sorm)) {
 			swapxy(&k.eprops)
 			swapxy(&k.knowns)
 
-			swapxy(&k.scissor.Min)
-			swapxy(&k.scissor.Max)
+			swapxy(&k.cropr.Min)
+			swapxy(&k.cropr.Max)
 		}
 	}
 	return swap, swap
@@ -1065,7 +1080,7 @@ func trypos(p, a geom.Point) geom.Point {
 	return p
 }
 
-func sequencedivider(wo *World, c *Sorm, h bool) {
+func followdivider(wo *World, c *Sorm, h bool) {
 	beginaxis, endaxis := axis(h)
 	beginaxis(c)
 	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
@@ -1093,7 +1108,7 @@ func sequencedivider(wo *World, c *Sorm, h bool) {
 	endaxis(c)
 }
 
-func sequencealigner(wo *World, c *Sorm, h bool) {
+func followaligner(wo *World, c *Sorm, h bool) {
 	c.Size.X, c.Size.Y = 0, 0
 	beginaxis, endaxis := axis(h)
 
@@ -1111,8 +1126,9 @@ func sequencealigner(wo *World, c *Sorm, h bool) {
 			// max() means we don't stretch if we're out of limit.
 			k.Size.Y = max(0, (c.l.Y-c.knowns.Y)/c.props.Y*k.eprops.Y)
 			// Round lengths and sizes to the nearest integer.
-			// TODO Accumulate error in kids and try to make it strobe less.
-			if c.flags&flagDecimate > 0 || !(c.flags&flagDontDecimate > 0) {
+			// TODO Assign a fixed pixel value for each whole stretch value inside the same stretch space.
+			//	Make it so layout of Windows 11 calculator is impossible 😁.
+			if c.decimated() {
 				ee, eed := roundmodf(e)
 				eo, ea := roundmodf(k.Size.Y + ee)
 				e = eed
@@ -1140,7 +1156,7 @@ func sequencealigner(wo *World, c *Sorm, h bool) {
 		endaxis(k)
 	})
 	c.Size.Y = y + e
-	if c.flags&flagDecimate > 0 || !(c.flags&flagDontDecimate > 0) {
+	if c.decimated() {
 		c.Size.Y = math.Round(c.Size.Y)
 	}
 	endaxis(c)
@@ -1159,20 +1175,21 @@ func (wo *World) apply(p *Sorm, c *Sorm) {
 		}
 	}
 
-	// Set scissor to limit if needed.
-	if c.flags&flagScissor > 0 {
-		c.scissor = geom.Rect(0, 0, c.l.X, c.l.Y)
+	// Set crop to limit if needed.
+	if c.flags&flagCrop > 0 {
+		c.cropr = geom.Rect(0, 0, c.l.X, c.l.Y)
 	}
 	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
 		// NOTE Aligner is called after these assignments.
 		// 	So this can't influence limits at later stages.
 		k.l.X = c.l.X
 		k.l.Y = c.l.Y
-		// Inherit scissor.
-		if c.flags&flagScissor > 0 {
-			k.scissori = c.i
+		// Inherit crop.
+		// TODO This may be in the first iteration.
+		if c.flags&flagCrop > 0 {
+			k.cropi = c.i
 		} else {
-			k.scissori = c.scissori
+			k.cropi = c.cropi
 		}
 
 		// Apply scale.
@@ -1210,40 +1227,51 @@ func (wo *World) apply(p *Sorm, c *Sorm) {
 		}
 	})
 
-	if c.flags&flagScissor > 0 {
+	if c.flags&flagCrop > 0 {
 		c.Size.X = min(c.Size.X, c.l.X)
 		c.Size.Y = min(c.Size.Y, c.l.Y)
 	}
 }
 
-func (wo *World) resolvepremods(_ *Sorm, c *Sorm) {
+func (wo *World) resolvepremods(_ *Sorm, c *Sorm, one bool) {
 	if c.tag != 0 {
 		return
 	}
-	// Premodifiers have order of execution.
-	slices.SortFunc(c.pres(wo), func(a, b Sorm) int {
-		return int(b.tag - a.tag)
-	})
+	// Premodifiers are resolved once before the crop pass.
+	if wo.cropping == 0 {
+		slices.SortFunc(c.pres(wo), func(a, b Sorm) int {
+			return int(b.tag - a.tag)
+			// Premodifiers have order of execution.
+		})
 
-	for _, m := range c.pres(wo) {
-		if m.tag == tagLimit && (m.Size.X >= 0 || m.Size.Y >= 0) {
-			continue
+		for _, m := range c.pres(wo) {
+			if m.tag == tagLimit && (m.Size.X >= 0 || m.Size.Y >= 0) {
+				continue
+			}
+			preActions[-100-m.tag](wo, c, &m)
 		}
-		preActions[-100-m.tag](wo, c, &m)
+
+		// Defer scissored compounds for another pass.
+		// Skip the whole subtree.
+		// TODO Nested scissors are impossible now.
+		if c.flags&flagCrop > 0 {
+			wo.cropped = append(wo.cropped, c)
+			return
+		}
 	}
 
-	// Defer scissored compounds for another pass.
-	// if c.flags&flagScissor > 0 && !wo.scissoring {
-	// 	wo.scissored = append(wo.scissored, c)
-	// 	return
-	// }
-
-	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
+	// When wo.Croping == 0, this is the first tree iteration in a frame.
+	c.kidsiter(wo, kiargs{firstloop: one}, func(k *Sorm) {
 		// Cascade matrices and some flags
 		k.m = c.m
 		k.flags |= c.flags & flagDontDecimate
 		k.flags |= c.flags & flagDecimate
-		wo.resolvepremods(c, k)
+		wo.resolvepremods(c, k, false)
+		if wo.cropping == 0 {
+			if c.flags&flagCrop == 0 {
+				k.flags |= flagNotCropped
+			}
+		}
 		// Resolve sprite text widths based on a real font size
 		// TODO Broken, probably because of incorrect scaling with matrices
 		// TODO Vertical
@@ -1263,36 +1291,36 @@ func (wo *World) resolvepremods(_ *Sorm, c *Sorm) {
 	})
 }
 
-func (wo *World) layout(pool []Sorm, root *Sorm) {
+func (wo *World) layout(pool []Sorm, root ...*Sorm) {
 	// Resolve premodifiers and stack negative sizes.
-	wo.resolvepremods(nil, root)
-	wo.bottombreadthiter(pool, func(s, _ *Sorm) {
-		switch s.aligner {
-		case alignerVfollow:
-			sequencedivider(wo, s, false)
-		case alignerHfollow:
-			sequencedivider(wo, s, true)
+	for i := range root {
+		wo.resolvepremods(nil, root[i], i == 0)
+		wo.bottombreadthiter(pool, func(s, _ *Sorm) {
+			switch s.aligner {
+			case alignerVfollow:
+				followdivider(wo, s, false)
+			case alignerHfollow:
+				followdivider(wo, s, true)
+			}
+		})
+
+		if wo.Events.Match(`Press(F4)`) {
+			println("@ Tree before applying stretches")
+			sormp(wo, *last(pool), 0)
+			println()
 		}
-	})
 
-	if wo.Events.Match(`Press(F4)`) {
-		println("@ Tree before applying stretches")
-		sormp(wo, *last(pool), 0)
-		println()
+		// Do the layout.
+		wo.apply(nil, root[i])
 	}
-
-	// Do the layout.
-	wo.apply(nil, root)
-
-	// Inherit moves. Cascade scissors, fills and strokes.
+	// Inherit moves. Cascade croppings, fills and strokes.
 	// TODO Maybe wo.apply should do it? Kind of makes more sense.
-	// The reason it is separated is because we don't know how absolute component
-	// sizes and coordinates till the very end.
+	// The reason it is separated is because we don't know absolute component sizes and
+	// coordinates till the very end.
 	wo.topbreadthiter(pool, func(c, efc *Sorm) {
 		c.kidsiter(wo, kiargs{}, func(k *Sorm) {
-			k.p.X += efc.p.X
-			k.p.Y += efc.p.Y
-			k.scissor = k.scissor.Add(geom.Pt(efc.p.X, efc.p.Y))
+			k.p = k.p.Add(efc.p)
+			k.cropr = k.cropr.Add(efc.p)
 			if k.fill == (nanovgo.Paint{}) {
 				k.fill = efc.fill
 			}
@@ -1307,29 +1335,10 @@ func (wo *World) layout(pool []Sorm, root *Sorm) {
 
 	// Apply scissors.
 	wo.bottombreadthiter(pool, func(s, _ *Sorm) {
-		if s.scissori > 0 {
-			s.scissor = pool[s.scissori].Rectangle()
+		if s.cropi > 0 {
+			s.cropr = pool[s.cropi].Rectangle()
 		}
 	})
-
-	// Print tree for debug. Do it before sorting.
-	if wo.f1 {
-		println("@ Tree after layout")
-		sormp(wo, *last(pool), 0)
-		println()
-		wo.f1 = false
-	}
-	if wo.Events.Match(`Press(F1)`) {
-		wo.f1 = true
-	}
-
-	if wo.Events.Match(`Press(F6)`) {
-		println("@ Auxpool")
-		for i := range wo.auxpool {
-			println(i, wo.auxpool[i])
-		}
-		println()
-	}
 }
 
 // Develop applies the layout and renders the next frame.
@@ -1352,12 +1361,30 @@ func (wo *World) Develop() {
 		})
 	}
 
+	wo.cropping = 0
 	wo.layout(pool, last(pool))
-	// wo.scissoring = true
-	// for i := range wo.scissored {
-	// 	wo.layout(pool, wo.scissored[i])
-	// }
-	// wo.scissoring = false
+	wo.cropping = 1
+	wo.layout(pool, wo.cropped...)
+	wo.cropping = 2
+
+	// Print tree for debug. Do it before sorting.
+	if wo.f1 {
+		println("@ Tree after layout")
+		sormp(wo, *last(pool), 0)
+		println()
+		wo.f1 = false
+	}
+	if wo.Events.Match(`Press(F1)`) {
+		wo.f1 = true
+	}
+
+	if wo.Events.Match(`Press(F6)`) {
+		println("@ Auxpool")
+		for i := range wo.auxpool {
+			println(i, wo.auxpool[i])
+		}
+		println()
+	}
 
 	// Sort in draw order.
 	slices.SortFunc(pool, func(a, b Sorm) int {
@@ -1365,7 +1392,7 @@ func (wo *World) Develop() {
 	})
 	// After this point, (*Sorm).kidsiter won't work because indices are broken.
 
-	// Apply conditional paints, match drag-and-drop events.
+	// Apply conditional paints, match drag-and-drop events, handle scrolls.
 	for i := len(pool) - 1; i >= 0; i-- {
 		s := &pool[i]
 		r := geom.Rect(s.p.X, s.p.Y, s.p.X+s.Size.X, s.p.Y+s.Size.Y)
@@ -1394,6 +1421,11 @@ func (wo *World) Develop() {
 				wo.drag = nil
 			}
 		}
+		if s.idx != nil {
+			if m.Match(`Scroll:in`) {
+				// s.idx.I
+			}
+		}
 	}
 
 	// Final drag match — resets drag if it was dropped in nowhere.
@@ -1408,15 +1440,15 @@ func (wo *World) Develop() {
 			return
 		}
 
-		if s.scissori > 0 && s.scissor.Intersect(s.Rectangle()) == (geom.Rectangle{}) {
+		if s.cropi > 0 && s.cropr.Intersect(s.Rectangle()) == (geom.Rectangle{}) {
 			return
 		}
 
 		*s = s.decimate()
-		// Set scissor up.
+		// Set crop up.
 		vgo.ResetScissor()
-		if s.scissor.Dx() > 0 && s.scissor.Dy() > 0 {
-			x, y, w, h := rect2nvgxywh(s.scissor)
+		if s.cropr.Dx() > 0 && s.cropr.Dy() > 0 {
+			x, y, w, h := rect2nvgxywh(s.cropr)
 			x = float32(math.Floor(float64(x)))
 			y = float32(math.Floor(float64(y)))
 			w = float32(math.Ceil(float64(w)))
@@ -1486,7 +1518,7 @@ func (wo *World) Develop() {
 		vgo.SetFillPaint(hexpaint(`#ff000020`))
 		vgo.BeginPath()
 		for _, s := range pool {
-			if s.scissori == 0 {
+			if s.cropi == 0 {
 				continue
 			}
 			if s.Size.Y < .5 && s.Size.X < .5 {
@@ -1496,12 +1528,12 @@ func (wo *World) Develop() {
 			s.p.X -= 0.5
 			s.p.Y -= 0.5
 			if s.tag >= 0 {
-				wo.Vgo.Rect(float32(s.scissor.Min.X), float32(s.scissor.Min.Y),
-					float32(s.scissor.Dx()), float32(s.scissor.Dy()))
+				wo.Vgo.Rect(float32(s.cropr.Min.X), float32(s.cropr.Min.Y),
+					float32(s.cropr.Dx()), float32(s.cropr.Dy()))
 			}
 		}
 		for _, s := range wo.auxpool {
-			if s.scissori == 0 {
+			if s.cropi == 0 {
 				continue
 			}
 			if s.Size.Y < .5 && s.Size.X < .5 {
@@ -1511,8 +1543,8 @@ func (wo *World) Develop() {
 			s.p.X -= 0.5
 			s.p.Y -= 0.5
 			if s.tag >= 0 {
-				wo.Vgo.Rect(float32(s.scissor.Min.X), float32(s.scissor.Min.Y),
-					float32(s.scissor.Dx()), float32(s.scissor.Dy()))
+				wo.Vgo.Rect(float32(s.cropr.Min.X), float32(s.cropr.Min.Y),
+					float32(s.cropr.Dx()), float32(s.cropr.Dy()))
 			}
 		}
 		vgo.ClosePath()
@@ -1541,7 +1573,7 @@ func (wo *World) Develop() {
 	zeroandclear(&wo.auxpool)
 	wo.auxn = 0
 	zeroandclear(&wo.tmp)
-	zeroandclear(&wo.scissored)
+	zeroandclear(&wo.cropped)
 
 	wo.sinks = wo.sinks[:1]
 

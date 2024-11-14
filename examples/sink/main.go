@@ -209,7 +209,6 @@ func (wo *World) Examples() Sorm {
 						wo.Rectangle(-1, -1),
 						wo.Rectangle(-2, -1),
 						wo.Compound(
-							wo.DoNotDecimate(),
 							wo.Vfollow(),
 							wo.Rectangle(-1, -1),
 							wo.Compound(
@@ -221,7 +220,7 @@ func (wo *World) Examples() Sorm {
 							wo.Rectangle(-1, -1)),
 						wo.Rectangle(-2, -2),
 						wo.Compound(
-							wo.Decimate(),
+							wo.DoNotDecimate(),
 							wo.Hfollow(),
 							wo.Limit(-1, -4),
 							wo.Rectangle(-1, -1),
@@ -292,10 +291,10 @@ func (wo *World) Examples() Sorm {
 		wo.Compound(
 			wo.Hfollow(),
 			wo.BetweenVoid(64, 0),
-			wo.Example(`Scissor`, func() Sorm {
+			wo.Example(`Crop`, func() Sorm {
 				return wo.Compound(
 					wo.Limit(100, 100),
-					wo.Scissor(),
+					wo.Crop(),
 					wo.Compound(
 						wo.Vfollow(),
 						wo.Rectangle(100, 50).Fill(dark),
@@ -310,14 +309,14 @@ func (wo *World) Examples() Sorm {
 				return wo.Compound(
 					wo.Limit(100, 100),
 					wo.Halign(numbox),
-					wo.Scissor(),
+					wo.Crop(),
 					wo.Illustration(-1, -1, "zoom", okcomputer))
 			}),
 			wo.Example(`Scroll`, func() Sorm {
 				return wo.Compound(
 					wo.Limit(300, 100),
 					wo.Vfollow(),
-					wo.Scissor(),
+					wo.Crop(),
 					wo.Sequence(contraption.SliceSequence(barkov, func(s string) contraption.Sorm {
 						return wo.Compound(
 							wo.Vfollow(),
