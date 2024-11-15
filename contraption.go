@@ -1111,7 +1111,6 @@ func followdivider(wo *World, c *Sorm, h bool) {
 func followaligner(wo *World, c *Sorm, h bool) {
 	c.Size.X, c.Size.Y = 0, 0
 	beginaxis, endaxis := axis(h)
-
 	// Calculate unknowns and apply kids which sizes were unknown,
 	// lay out the sequence then.
 	y := 0.0
@@ -1209,6 +1208,9 @@ func (wo *World) apply(p *Sorm, c *Sorm) {
 	})
 
 	alignerActions[c.aligner](wo, c)
+	if c.flags&flagCrop > 0 {
+		c.Size = c.l
+	}
 
 	// Apply postorder/anyorder modifiers.
 	for _, m := range c.mods(wo) {
@@ -1233,26 +1235,25 @@ func (wo *World) apply(p *Sorm, c *Sorm) {
 	}
 }
 
-func (wo *World) resolvepremods(_ *Sorm, c *Sorm, one bool) {
+func (wo *World) prepass(_ *Sorm, c *Sorm, one bool) {
 	if c.tag != 0 {
 		return
 	}
-	// Premodifiers are resolved once before the crop pass.
-	if wo.cropping == 0 {
-		slices.SortFunc(c.pres(wo), func(a, b Sorm) int {
-			return int(b.tag - a.tag)
-			// Premodifiers have order of execution.
-		})
 
-		for _, m := range c.pres(wo) {
-			if m.tag == tagLimit && (m.Size.X >= 0 || m.Size.Y >= 0) {
-				continue
-			}
-			preActions[-100-m.tag](wo, c, &m)
+	slices.SortFunc(c.pres(wo), func(a, b Sorm) int {
+		return int(b.tag - a.tag)
+		// Premodifiers have order of execution.
+	})
+
+	for _, m := range c.pres(wo) {
+		if m.tag == tagLimit && (m.Size.X >= 0 || m.Size.Y >= 0) {
+			continue
 		}
+		preActions[-100-m.tag](wo, c, &m)
+	}
 
-		// Defer scissored compounds for another pass.
-		// Skip the whole subtree.
+	if wo.cropping == 0 {
+		// Defer scissored compounds for another pass, skip the whole subtree.
 		// TODO Nested scissors are impossible now.
 		if c.flags&flagCrop > 0 {
 			wo.cropped = append(wo.cropped, c)
@@ -1260,15 +1261,15 @@ func (wo *World) resolvepremods(_ *Sorm, c *Sorm, one bool) {
 		}
 	}
 
-	// When wo.Croping == 0, this is the first tree iteration in a frame.
+	// When wo.cropping == 0, this is the first tree iteration in a frame.
 	c.kidsiter(wo, kiargs{firstloop: one}, func(k *Sorm) {
 		// Cascade matrices and some flags
 		k.m = c.m
 		k.flags |= c.flags & flagDontDecimate
 		k.flags |= c.flags & flagDecimate
-		wo.resolvepremods(c, k, false)
+		wo.prepass(c, k, false)
 		if wo.cropping == 0 {
-			if c.flags&flagCrop == 0 {
+			if c.flags&flagCrop == 0 && k.flags&flagCrop == 0 {
 				k.flags |= flagNotCropped
 			}
 		}
@@ -1294,13 +1295,13 @@ func (wo *World) resolvepremods(_ *Sorm, c *Sorm, one bool) {
 func (wo *World) layout(pool []Sorm, root ...*Sorm) {
 	// Resolve premodifiers and stack negative sizes.
 	for i := range root {
-		wo.resolvepremods(nil, root[i], i == 0)
-		wo.bottombreadthiter(pool, func(s, _ *Sorm) {
-			switch s.aligner {
+		wo.prepass(nil, root[i], i == 0 && wo.cropping == 0)
+		wo.bottombreadthiter(pool, func(k, _ *Sorm) {
+			switch k.aligner {
 			case alignerVfollow:
-				followdivider(wo, s, false)
+				followdivider(wo, k, false)
 			case alignerHfollow:
-				followdivider(wo, s, true)
+				followdivider(wo, k, true)
 			}
 		})
 
@@ -1333,7 +1334,7 @@ func (wo *World) layout(pool []Sorm, root ...*Sorm) {
 		})
 	})
 
-	// Apply scissors.
+	// Apply crops.
 	wo.bottombreadthiter(pool, func(s, _ *Sorm) {
 		if s.cropi > 0 {
 			s.cropr = pool[s.cropi].Rectangle()

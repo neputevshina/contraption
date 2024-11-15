@@ -305,16 +305,9 @@ func (wo *World) Examples() Sorm {
 							wo.Rectangle(50, 100).Fill(yellow),
 						)))
 			}),
-			wo.Example(`Illustration`, func() Sorm {
-				return wo.Compound(
-					wo.Limit(100, 100),
-					wo.Halign(numbox),
-					wo.Crop(),
-					wo.Illustration(-1, -1, "zoom", okcomputer))
-			}),
 			wo.Example(`Scroll`, func() Sorm {
 				return wo.Compound(
-					wo.Limit(300, 100),
+					wo.Limit(200, 100),
 					wo.Vfollow(),
 					wo.Crop(),
 					wo.Sequence(contraption.SliceSequence(barkov, func(s string) contraption.Sorm {
@@ -323,6 +316,13 @@ func (wo *World) Examples() Sorm {
 							wo.Text(8, s).Fill(hexpaint(`#000000`)),
 							wo.Void(0, 8))
 					})))
+			}),
+			wo.Example(`Illustration`, func() Sorm {
+				return wo.Compound(
+					wo.Limit(100, 100),
+					wo.Halign(numbox),
+					wo.Crop(),
+					wo.Illustration(-1, -1, "zoom", okcomputer))
 			}),
 		))
 }
