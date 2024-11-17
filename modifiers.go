@@ -311,7 +311,7 @@ func (wo *World) Key(k any) (v *any) {
 	return
 }
 
-func (wo *World) DoNotDecimate() (s Sorm) {
+func (wo *World) Nodecimate() (s Sorm) {
 	s = wo.newSorm()
 	s.tag = tagDontDecimate
 	return

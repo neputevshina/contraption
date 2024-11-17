@@ -1161,6 +1161,63 @@ func followaligner(wo *World, c *Sorm, h bool) {
 	endaxis(c)
 }
 
+func (wo *World) prepass(_ *Sorm, c *Sorm, one bool) {
+	if c.tag != 0 {
+		return
+	}
+
+	slices.SortFunc(c.pres(wo), func(a, b Sorm) int {
+		return int(b.tag - a.tag)
+		// Premodifiers have order of execution.
+	})
+
+	for _, m := range c.pres(wo) {
+		if m.tag == tagLimit && (m.Size.X >= 0 || m.Size.Y >= 0) {
+			continue
+		}
+		preActions[-100-m.tag](wo, c, &m)
+	}
+
+	if wo.cropping == 0 {
+		// Defer scissored compounds for another pass, skip the whole subtree.
+		// TODO Nested scissors are impossible now.
+		if c.flags&flagCrop > 0 {
+			wo.cropped = append(wo.cropped, c)
+			return
+		}
+	}
+
+	// When wo.cropping == 0, this is the first tree iteration in a frame.
+	c.kidsiter(wo, kiargs{firstloop: one}, func(k *Sorm) {
+		// Cascade matrices and some flags
+		k.m = c.m
+		k.flags |= c.flags & flagDontDecimate
+		k.flags |= c.flags & flagDecimate
+		wo.prepass(c, k, false)
+		if wo.cropping == 0 {
+			if c.flags&flagCrop == 0 && k.flags&flagCrop == 0 {
+				k.flags |= flagNotCropped
+			}
+		}
+		// Resolve sprite text widths based on a real font size
+		// TODO Broken, probably because of incorrect scaling with matrices
+		// TODO Vertical
+		// TODO flagNonlinear — set the size of an element only after setting up the matrix.
+		//	Equation is the another type of element with this property.
+		if k.tag == tagText {
+			s := k
+			wo.Vgo.SetFontFaceID(s.fontid)
+			wo.Vgo.SetFontSize(float32(k.Size.Y))
+			_, abcd := wo.Vgo.TextBounds(0, 0, s.key.(string))
+			_, space := wo.Vgo.TextBounds(0, 0, " ")
+			s.Size.X = float64(abcd[2]-abcd[0]) - float64(space[2]-space[0])
+			if s.Size.X < 0 {
+				s.Size.X = 0
+			}
+		}
+	})
+}
+
 func (wo *World) apply(p *Sorm, c *Sorm) {
 	// Apply is called on every shape, so ignore anything that is not Compound.
 	if c.tag != 0 {
@@ -1235,81 +1292,20 @@ func (wo *World) apply(p *Sorm, c *Sorm) {
 	}
 }
 
-func (wo *World) prepass(_ *Sorm, c *Sorm, one bool) {
-	if c.tag != 0 {
-		return
-	}
-
-	slices.SortFunc(c.pres(wo), func(a, b Sorm) int {
-		return int(b.tag - a.tag)
-		// Premodifiers have order of execution.
-	})
-
-	for _, m := range c.pres(wo) {
-		if m.tag == tagLimit && (m.Size.X >= 0 || m.Size.Y >= 0) {
-			continue
-		}
-		preActions[-100-m.tag](wo, c, &m)
-	}
-
-	if wo.cropping == 0 {
-		// Defer scissored compounds for another pass, skip the whole subtree.
-		// TODO Nested scissors are impossible now.
-		if c.flags&flagCrop > 0 {
-			wo.cropped = append(wo.cropped, c)
-			return
-		}
-	}
-
-	// When wo.cropping == 0, this is the first tree iteration in a frame.
-	c.kidsiter(wo, kiargs{firstloop: one}, func(k *Sorm) {
-		// Cascade matrices and some flags
-		k.m = c.m
-		k.flags |= c.flags & flagDontDecimate
-		k.flags |= c.flags & flagDecimate
-		wo.prepass(c, k, false)
-		if wo.cropping == 0 {
-			if c.flags&flagCrop == 0 && k.flags&flagCrop == 0 {
-				k.flags |= flagNotCropped
-			}
-		}
-		// Resolve sprite text widths based on a real font size
-		// TODO Broken, probably because of incorrect scaling with matrices
-		// TODO Vertical
-		// TODO flagNonlinear — set the size of an element only after setting up the matrix.
-		//	Equation is the another type of element with this property.
-		if k.tag == tagText {
-			s := k
-			wo.Vgo.SetFontFaceID(s.fontid)
-			wo.Vgo.SetFontSize(float32(k.Size.Y))
-			_, abcd := wo.Vgo.TextBounds(0, 0, s.key.(string))
-			_, space := wo.Vgo.TextBounds(0, 0, " ")
-			s.Size.X = float64(abcd[2]-abcd[0]) - float64(space[2]-space[0])
-			if s.Size.X < 0 {
-				s.Size.X = 0
-			}
-		}
-	})
-}
-
 func (wo *World) layout(pool []Sorm, root ...*Sorm) {
 	// Resolve premodifiers and stack negative sizes.
 	for i := range root {
 		wo.prepass(nil, root[i], i == 0 && wo.cropping == 0)
 		wo.bottombreadthiter(pool, func(k, _ *Sorm) {
-			switch k.aligner {
-			case alignerVfollow:
-				followdivider(wo, k, false)
-			case alignerHfollow:
-				followdivider(wo, k, true)
+			if k.flags&flagNotCropped > 0 {
+				switch k.aligner {
+				case alignerVfollow:
+					followdivider(wo, k, false)
+				case alignerHfollow:
+					followdivider(wo, k, true)
+				}
 			}
 		})
-
-		if wo.Events.Match(`Press(F4)`) {
-			println("@ Tree before applying stretches")
-			sormp(wo, *last(pool), 0)
-			println()
-		}
 
 		// Do the layout.
 		wo.apply(nil, root[i])

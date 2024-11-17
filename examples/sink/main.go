@@ -220,7 +220,7 @@ func (wo *World) Examples() Sorm {
 							wo.Rectangle(-1, -1)),
 						wo.Rectangle(-2, -2),
 						wo.Compound(
-							wo.DoNotDecimate(),
+							wo.Nodecimate(),
 							wo.Hfollow(),
 							wo.Limit(-1, -4),
 							wo.Rectangle(-1, -1),
