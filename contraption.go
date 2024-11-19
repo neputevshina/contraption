@@ -927,10 +927,11 @@ out:
 				var buf [32]Sorm
 			out2:
 				for i := 0; i < q.Length(wo); i += len(buf) {
+					println(i, len(buf), i+len(buf), q.Length(wo))
 					n := q.Get(wo, i, buf[:])
 					for j := 0; j < min(n, len(buf)); j++ {
-						f(k)                                // (1)
-						if k.flags&flagBreakIteration > 0 { // (2)
+						f(&buf[j])                               // (1)
+						if buf[j].flags&flagBreakIteration > 0 { // (2)
 							break out2
 						}
 					}
@@ -1160,7 +1161,7 @@ func followaligner(wo *World, c *Sorm, h bool) {
 
 		beginaxis(k)
 		// Stop laying out kids if we're clipped out of limit.
-		if c.flags&flagCrop > 0 && y > c.l.Y {
+		if y > c.l.Y {
 			k.flags |= flagBreakIteration
 		}
 		k.p.Y = y
@@ -1386,9 +1387,6 @@ func (wo *World) Develop() {
 	for i := len(pool) - 1; i >= 0; i-- {
 		s := &pool[i]
 		s.i = i
-		s.kidsiter(wo, kiargs{}, func(k *Sorm) {
-			k.pi = s.i
-		})
 	}
 
 	wo.cropping = 0
