@@ -15,7 +15,7 @@ type adhocSequence struct {
 
 func (s *adhocSequence) Get(wo *World, j int, buf []Sorm) (n int) {
 	sl := s.length()
-	for i := 0; i < min(len(buf), sl); i++ {
+	for i := 0; i < min(len(buf), sl-j); i++ {
 		buf[i] = s.get(j + i)
 	}
 	return sl - j

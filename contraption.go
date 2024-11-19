@@ -358,6 +358,23 @@ type Equation interface {
 	Size() geom.Point
 }
 
+// TODO Nesting sequences and scissors with []pools
+type pools struct {
+	nextn   int
+	pool    []Sorm
+	auxn    int
+	auxpool []Sorm
+	prefix  int
+
+	old    []Sorm
+	auxold []Sorm
+
+	bufferstash []Sorm
+
+	cropped  []*Sorm
+	cropping int
+}
+
 type World struct {
 	*Events
 	gen int
@@ -367,14 +384,7 @@ type World struct {
 
 	tmp []Sorm
 
-	nextn   int
-	pool    []Sorm
-	auxn    int
-	auxpool []Sorm
-	prefix  int
-
-	old    []Sorm
-	auxold []Sorm
+	pools
 
 	Vgo *nanovgo.Context
 
@@ -403,9 +413,6 @@ type World struct {
 	f1           bool
 
 	alloc func(n int) (left, right int)
-
-	cropped  []*Sorm
-	cropping int
 
 	images map[io.Reader]imagestruct
 
@@ -911,93 +918,30 @@ out:
 		q, ok := k.key.(Sequence)
 		if ok {
 			if k.flags&flagSequenceSaved == 0 {
-				args := wo.tmpalloc(q.Length(wo))
 				reall := len(wo.auxpool)
 
-				// Treat the aux pool as a main pool and the sequence as a root compound.
+				// Treat the aux pool as the main pool and the sequence as the root compound.
 				pop := wo.beginvirtual()
 				wo.prefix = k.z
-				q.Get(wo, i, args[:])
-				// TODO Call (*World).layout on every scissored compound right here.
-				// TODO
-				// var buf [1024]Sorm
-				// for i := 0; i < q.Length(wo); i++ {
-				//
-				// }
-				wo.prefix = 0
-				wo.endvirtual(pop)
-				// Copy elements materialized from the sequence to the auxpool,
-				// treat them like arguments of (*World).Compound
-				l, r := wo.allocaux(q.Length(wo))
-				copy(wo.auxpool[l:r], args)
-				k.kidsl = reall
-				k.kidsr = r
-				// Save immediate kids.
-				k.presl = l
-				k.presr = r
-				k.flags |= flagSequenceSaved
-			} else {
-				aux := wo.auxpool[k.presl:k.presr]
-				for i := range aux {
-					k := &aux[i]
-					pop := wo.beginvirtual()
-					f(k) // (1)
-					wo.endvirtual(pop)
-					if k.flags&flagBreakIteration > 0 { // (2)
-						break out
-					}
-				}
-			}
-		} else {
-			f(k)                                // (1)
-			if k.flags&flagBreakIteration > 0 { // (2)
-				break out
-			}
-		}
-	}
-}
-
-/*
-
-func (s *Sorm) kidsiter(wo *World, a kiargs, f func(k *Sorm)) {
-	// TODO Idea: take a limit in kidsiter, and if it is cropped, stop iteration when over it.
-	// It should work since cropped compounds can't stretch kids.
-	if s.tag == tagSequence {
-		return
-	}
-
-	kids := wo.pool[s.kidsl:s.kidsr]
-out:
-	for i := range kids {
-		k := &kids[i]
-
-		q, ok := k.key.(Sequence)
-		if ok {
-			if k.flags&flagSequenceSaved == 0 {
-				reall := len(wo.auxpool)
-
-				// Treat the aux pool as a main pool and the sequence as a root compound.
-				pop := wo.beginvirtual()
-				wo.prefix = k.z
+				wo.bufferstash = wo.bufferstash[:0]
 				var buf [32]Sorm
 			out2:
 				for i := 0; i < q.Length(wo); i += len(buf) {
 					n := q.Get(wo, i, buf[:])
 					for j := 0; j < min(n, len(buf)); j++ {
-						pop := wo.beginvirtual()
-						f(k) // (1)
-						wo.endvirtual(pop)
+						f(k)                                // (1)
 						if k.flags&flagBreakIteration > 0 { // (2)
 							break out2
 						}
 					}
+					wo.bufferstash = append(wo.bufferstash, buf[:min(n, len(buf))]...)
 				}
 				wo.prefix = 0
 				wo.endvirtual(pop)
 				// Copy elements materialized from the sequence to the auxpool,
 				// treat them like arguments of (*World).Compound
-				l, r := wo.allocaux(len(buf))
-				copy(wo.auxpool[l:r], buf[:])
+				l, r := wo.allocaux(len(wo.bufferstash))
+				copy(wo.auxpool[l:r], wo.bufferstash)
 
 				k.kidsl = reall
 				k.kidsr = r
@@ -1025,8 +969,6 @@ out:
 		}
 	}
 }
-
-*/
 
 func (wo *World) topbreadthiter(pool []Sorm, f func(s, _ *Sorm)) {
 	wo.breadthiter(pool, f, false)
