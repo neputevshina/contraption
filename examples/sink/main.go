@@ -105,7 +105,9 @@ func main() {
 						p = `#ff00ff`
 					}
 					_ = h
-					return wo.Rectangle(-1, -h).Fill(hexpaint(p))
+					return wo.Compound(
+						wo.Rectangle(-1, -h),
+						wo.Fill(hexpaint(p)))
 				})),
 				wo.Limit(0, 10),
 				wo.Hfollow(),

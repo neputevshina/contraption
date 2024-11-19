@@ -61,7 +61,7 @@ func (wo *World) generalNewText(font []byte, kind tagkind) func(size float64, st
 	wo.nvgofontids = append(wo.nvgofontids, f.Vgoid)
 
 	return func(size float64, str string) Sorm {
-		s := wo.newSorm()
+		s := wo.beginsorm()
 		s.tag = kind
 
 		s.Size.Y = size
@@ -122,7 +122,7 @@ func (wo *World) NewVectorTextReader(font []byte) func(size float64, rd io.RuneS
 		panic(err)
 	}
 	return func(size float64, rd io.RuneScanner) Sorm {
-		s := wo.newSorm()
+		s := wo.beginsorm()
 		s.tag = tagVectorText
 		s.Size.Y = size
 		s.vecfont = id
@@ -140,7 +140,7 @@ func (wo *World) NewVectorText(font []byte) func(size float64, str []rune) Sorm 
 		panic(err)
 	}
 	return func(size float64, str []rune) Sorm {
-		s := wo.newSorm()
+		s := wo.beginsorm()
 		s.tag = tagVectorText
 		s.Size.Y = size
 		s.vecfont = id
@@ -188,7 +188,7 @@ func vectortextrun(wo *World, s *Sorm) {
 
 // Circle is a circle shape.
 func (wo *World) Circle(d float64) (s Sorm) {
-	s = wo.newSorm()
+	s = wo.beginsorm()
 	s.tag = tagCircle
 	s.Size.X = d
 	s.Size.Y = d
@@ -203,12 +203,13 @@ func circlerun(wo *World, s *Sorm) {
 
 // Rectangle is a rectangle shape.
 func (wo *World) Rectangle(w, h complex128) (s Sorm) {
-	s = wo.newSorm()
+	s = wo.beginsorm()
 	s.tag = tagRect
 	s.Size.X = real(w)
 	s.Size.Y = real(h)
 	s.add.X = imag(w)
 	s.add.Y = imag(h)
+	wo.endsorm(s)
 	return
 }
 func rectrun(wo *World, s *Sorm) {
@@ -219,13 +220,14 @@ func rectrun(wo *World, s *Sorm) {
 
 // Roundrect is a rounded rectangle shape.
 func (wo *World) Roundrect(w, h complex128, r float64) (s Sorm) {
-	s = wo.newSorm()
+	s = wo.beginsorm()
 	s.tag = tagRoundrect
 	s.Size.X = real(w)
 	s.Size.Y = real(h)
 	s.add.X = imag(w)
 	s.add.Y = imag(h)
 	s.r = r
+	wo.endsorm(s)
 	return
 }
 func roundrectrun(wo *World, s *Sorm) {
@@ -235,18 +237,19 @@ func roundrectrun(wo *World, s *Sorm) {
 }
 
 func (wo *World) Void(w, h complex128) (s Sorm) {
-	s = wo.newSorm()
+	s = wo.beginsorm()
 	s.tag = tagVoid
 	s.Size.X = real(w)
 	s.Size.Y = real(h)
 	s.add.X = imag(w)
 	s.add.Y = imag(h)
+	wo.endsorm(s)
 	return
 }
 func voidrun(wo *World, s *Sorm) {}
 
 func (wo *World) Equation(eqn Equation) (s Sorm) {
-	s = wo.newSorm()
+	s = wo.beginsorm()
 	s.tag = tagEquation
 
 	pt := eqn.Size()
@@ -267,6 +270,7 @@ func (wo *World) Equation(eqn Equation) (s Sorm) {
 		wo.eqnCache[eqn] = impMarch(nil, eqn.Eqn, s.Size.X, s.Size.Y)
 	}
 	wo.eqnLife[eqn] = 2
+	wo.endsorm(s)
 	return
 }
 func equationrun(wo *World, s *Sorm) {
@@ -286,13 +290,14 @@ func equationrun(wo *World, s *Sorm) {
 
 // Canvas gives a direct access to Nanovgo for painting a vector image.
 func (wo *World) Canvas(w, h complex128, run func(vgo *nanovgo.Context, wt geom.Geom, rect geom.Rectangle)) (s Sorm) {
-	s = wo.newSorm()
+	s = wo.beginsorm()
 	s.tag = tagCanvas
 	s.canvas = run
 	s.Size.X = real(w)
 	s.Size.Y = real(h)
 	s.add.X = imag(w)
 	s.add.Y = imag(h)
+	wo.endsorm(s)
 	return
 }
 func canvasrun(wo *World, s *Sorm) {
@@ -317,9 +322,10 @@ func canvasrun(wo *World, s *Sorm) {
 //
 // Modifiers in Sequence right now are ignored, but can trigger a panic in future versions.
 func (wo *World) Sequence(q Sequence) (s Sorm) {
-	s = wo.newSorm()
+	s = wo.beginsorm()
 	s.tag = tagSequence
 	s.key = q
+	wo.endsorm(s)
 	return s
 }
 func sequencerun(wo *World, s *Sorm) {
@@ -347,7 +353,7 @@ func sequencerun(wo *World, s *Sorm) {
 // The texture from the image may be interpolated to a smaller size.
 // Deallocation of the texture is the subject to the two-frame policy like any other resource in Contraption.
 func (wo *World) Illustration(w, h complex128, mode string, src io.Reader) (s Sorm) {
-	s = wo.newSorm()
+	s = wo.beginsorm()
 	s.tag = tagIllustration
 	s.key = src
 	u, ok := wo.images[src]
@@ -383,6 +389,7 @@ func (wo *World) Illustration(w, h complex128, mode string, src io.Reader) (s So
 		panic(`contraption: picture stretch mode is not one of "stretch", "zoom" or "pad"`)
 	}
 
+	wo.endsorm(s)
 	return s
 }
 func illustrationrun(wo *World, s *Sorm) {

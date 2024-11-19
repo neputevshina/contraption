@@ -446,3 +446,7 @@ func roundmodf(f float64) (float64, float64) {
 	r := math.Round(f)
 	return f - r, r
 }
+
+func asbs[T any](v T) []byte {
+	return unsafe.Slice((*byte)(unsafe.Pointer(&v)), unsafe.Sizeof(v))
+}

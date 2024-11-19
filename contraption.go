@@ -3,10 +3,15 @@
 // A good user interface framework must be an engine for a word processing game.
 //
 // TODO:
+//	- Combine all pools into one struct so later nested crops/sequences can be implemented more easily.
+//	- Animations
+//		- All animations are specified by deadline, no implicit duration
+//			- Places burden to maintain animation times on user :grin:
+//		- Interpolate between two trees (reordering, scaling etc)
 //	- Anchors
 //		- For Curve aligner and other CAD-like features
 //		- Are just numbers
-//	- Textbox behaviour
+//	- Textbox behavior
 //		- https://rxi.github.io/textbox_behaviour.html
 //		- Implemented over Sequence
 //			- TextSequence interface { Backspace(i, j), Delete(i, j), Insert(i, j), Copy(i, j) etc }
@@ -118,22 +123,24 @@
 //	- Laziness and scrolling [MAJOR TOPIC]
 //		+ wo.Sequence(seq Sequence) — a window to infinity!
 //			+ Every returned Sorm is included to the parent
-//	- A way to create uniformly sized buttons (as per tonsky)
-//		- Just create a special component for this, dumb ass
-//		- func Huniform(...Sorm) Sorm
-//		- func Vuniform(...Sorm) Sorm
-//		- Can use new negative value behavior? Just make needed widths/heights equal negative values.
-//		- Integer key to determine which sizes must be equal:
-//			- func Eqkey() Eqkey
-//			- func Hequal(Eqkey) Sorm
-//			- func Vequal(Eqkey) Sorm
-//		- Can be used to implement grid layout.
-//		- Other proposed names: Hequalize, Vequalize
-//		- H2Vfollow, V2Hfollow — stretch as one, lay out as another
+//	- Non-trivial layout
+//		- Timeline
+//			- See how clip names behave in almost every DAW.
+//		- A way to create uniformly sized buttons (as per tonsky)
+//			- Just create a special component for this, dumb ass
+//			- func Huniform(...Sorm) Sorm
+//			- func Vuniform(...Sorm) Sorm
+//			- Can use new negative value behavior? Just make needed widths/heights equal negative values.
+//			- Integer key to determine which sizes must be equal:
+//				- func Eqkey() Eqkey
+//				- func Hequal(Eqkey) Sorm
+//				- func Vequal(Eqkey) Sorm
+//			- Can be used to implement grid layout.
+//			- Other proposed names: Hequalize, Vequalize
+//			- H2Vfollow, V2Hfollow — stretch as one, lay out as another
 //	- Subworlds — layout inside canvases
 //	? Modifier to shape position independence
 //	? Fix paint interface
-//	- Animations
 //	- Remove bodges from layout (impossible)
 //	+ Drag'n'drop
 //	- Vector boolean ops
@@ -187,6 +194,8 @@ package contraption
 import (
 	"encoding/gob"
 	"fmt"
+	"hash"
+	"hash/fnv"
 	"image"
 	"io"
 	"math"
@@ -399,6 +408,9 @@ type World struct {
 	cropping int
 
 	images map[io.Reader]imagestruct
+
+	hasher  hash.Hash // Current tree hash
+	oldhash [16]byte  // Previous tree hash
 }
 
 type imagestruct struct {
@@ -425,16 +437,21 @@ type Sorm struct {
 	tag          tagkind
 	flags        flagval
 
-	Size, p, l            point
-	knowns, props, eprops point
-	add, ialign           point
+	Size   point
+	p      point // Position
+	l      point // Limit
+	knowns point // Sum of kids with known sizes
+	props  point // Total proportions of a compound
+	eprops point // Local proportions
+	add    point // Imaginary sizes: adds to stretch
+	ialign point // Alignment of an image
 
-	r       float64
-	m, prem geom.Geom
-	aligner alignerkind
+	r        float64   // Radius or more
+	m, postm geom.Geom // Transformation matrices
+	aligner  alignerkind
 	kidsl, kidsr,
 	modsl, modsr,
-	presl, presr int
+	presl, presr int // Slices of a pool for every kids type
 
 	idx     *Index
 	scrolld point
@@ -607,13 +624,13 @@ func (wo *World) BaseWorld() *World {
 	return wo
 }
 
-func (wo *World) newSorm() (s Sorm) {
+func (wo *World) beginsorm() (s Sorm) {
 	wo.nextn++
 
 	s = Sorm{
-		z:    wo.nextn,
-		m:    geom.Identity2d(),
-		prem: geom.Identity2d(),
+		z:     wo.nextn,
+		m:     geom.Identity2d(),
+		postm: geom.Identity2d(),
 	}
 	if wo.f1 {
 		_, s.callerfile, s.callerline, _ = runtime.Caller(2)
@@ -625,6 +642,21 @@ func (wo *World) newSorm() (s Sorm) {
 		s.flags = flagSequenceMark
 	}
 	return
+}
+
+func (wo *World) endsorm(s Sorm) {
+	wr := wo.hasher.Write
+	// Note that at the moment endsorm() is called it is creating the tree description.
+	// So every value here is not processed in any way.
+	// Even CondFill/Stroke is not called yet.
+	wr(asbs(s.z))
+	wr(asbs(s.Size))
+	wr(asbs(s.add))
+	wr(asbs(s.fill))
+	wr(asbs(s.stroke))
+	wr(asbs(s.tag))
+	wr(asbs(s.fontid))
+	wr(asbs(s.r))
 }
 
 func (wo *World) allowed(s *Sorm) bool {
@@ -733,18 +765,20 @@ func (wo *World) Cat(a, b []Sorm) (s Sorm) {
 	tmp := wo.tmpalloc(len(a) + len(b))
 	copy(tmp[:len(a)], a)
 	copy(tmp[len(a):], b)
-	return wo.compound(wo.newSorm(), tmp...)
+	return wo.compound(wo.beginsorm(), tmp...)
 }
 
 // Compound is a shape container.
 // It combines multiple Sorms into a single shape.
 // Every other container is just a rebranded Compound.
 func (wo *World) Compound(args ...Sorm) (s Sorm) {
-	return wo.compound(wo.newSorm(), args...)
+	s = wo.compound(wo.beginsorm(), args...)
+	wo.endsorm(s)
+	return
 }
 
 func (wo *World) realroot(args ...Sorm) Sorm {
-	return wo.compound2(wo.newSorm(), true, args...)
+	return wo.compound2(wo.beginsorm(), true, args...)
 }
 
 func (wo *World) compound(s Sorm, args ...Sorm) Sorm {
@@ -840,43 +874,6 @@ func (wo *World) Root(s ...Sorm) {
 	wo.rend = len(wo.pool)
 }
 
-// Next prepares the Contraption for rendering the next frame.
-// See package description for preferred use of Contraption.
-func (wo *World) Next() bool {
-	wo.MatchCount = 0
-
-	window := wo.Window
-	if window.ShouldClose() {
-		return false
-	}
-
-	// TODO Decouple backend and put more stuff in that .next().
-	wo.Events.next()
-
-	w, h := window.GetFramebufferSize()
-	gl.Viewport(0, 0, int32(w), int32(h))
-
-	w, h = window.GetSize()
-	wo.Wwin, wo.Hwin = float64(w), float64(h)
-	wo.Events.Viewport = geom.Pt(float64(w), float64(h))
-
-	cl := hex(`#ffffff`)
-	gl.ClearColor(cl.R, cl.G, cl.B, cl.A)
-	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT)
-	gl.Enable(gl.BLEND)
-	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
-	gl.Enable(gl.CULL_FACE)
-	gl.Disable(gl.DEPTH_TEST)
-
-	sc, _ := window.GetContentScale()
-	wo.Vgo.BeginFrame(w, h, float32(math.Ceil(float64(sc))))
-
-	wo.Vgo.SetFontFace(`go`)
-	wo.Vgo.SetFontSize(11)
-
-	return true
-}
-
 func (wo *World) beginvirtual() (pool []Sorm) {
 	if sameslice(wo.pool, wo.auxpool) {
 		panic(`contraption: nested Sequences are not allowed`)
@@ -929,8 +926,7 @@ out:
 				// }
 				wo.prefix = 0
 				wo.endvirtual(pop)
-
-				// Copy the elements materialized from sequence to the aux pool,
+				// Copy elements materialized from the sequence to the auxpool,
 				// treat them like arguments of (*World).Compound
 				l, r := wo.allocaux(q.Length(wo))
 				copy(wo.auxpool[l:r], args)
@@ -940,15 +936,16 @@ out:
 				k.presl = l
 				k.presr = r
 				k.flags |= flagSequenceSaved
-			}
-			aux := wo.auxpool[k.presl:k.presr]
-			for i := range aux {
-				k := &aux[i]
-				pop := wo.beginvirtual()
-				f(k) // (1)
-				wo.endvirtual(pop)
-				if k.flags&flagBreakIteration > 0 { // (2)
-					break out
+			} else {
+				aux := wo.auxpool[k.presl:k.presr]
+				for i := range aux {
+					k := &aux[i]
+					pop := wo.beginvirtual()
+					f(k) // (1)
+					wo.endvirtual(pop)
+					if k.flags&flagBreakIteration > 0 { // (2)
+						break out
+					}
 				}
 			}
 		} else {
@@ -959,6 +956,77 @@ out:
 		}
 	}
 }
+
+/*
+
+func (s *Sorm) kidsiter(wo *World, a kiargs, f func(k *Sorm)) {
+	// TODO Idea: take a limit in kidsiter, and if it is cropped, stop iteration when over it.
+	// It should work since cropped compounds can't stretch kids.
+	if s.tag == tagSequence {
+		return
+	}
+
+	kids := wo.pool[s.kidsl:s.kidsr]
+out:
+	for i := range kids {
+		k := &kids[i]
+
+		q, ok := k.key.(Sequence)
+		if ok {
+			if k.flags&flagSequenceSaved == 0 {
+				reall := len(wo.auxpool)
+
+				// Treat the aux pool as a main pool and the sequence as a root compound.
+				pop := wo.beginvirtual()
+				wo.prefix = k.z
+				var buf [32]Sorm
+			out2:
+				for i := 0; i < q.Length(wo); i += len(buf) {
+					n := q.Get(wo, i, buf[:])
+					for j := 0; j < min(n, len(buf)); j++ {
+						pop := wo.beginvirtual()
+						f(k) // (1)
+						wo.endvirtual(pop)
+						if k.flags&flagBreakIteration > 0 { // (2)
+							break out2
+						}
+					}
+				}
+				wo.prefix = 0
+				wo.endvirtual(pop)
+				// Copy elements materialized from the sequence to the auxpool,
+				// treat them like arguments of (*World).Compound
+				l, r := wo.allocaux(len(buf))
+				copy(wo.auxpool[l:r], buf[:])
+
+				k.kidsl = reall
+				k.kidsr = r
+				// Save immediate kids.
+				k.presl = l
+				k.presr = r
+				k.flags |= flagSequenceSaved
+			} else {
+				aux := wo.auxpool[k.presl:k.presr]
+				for i := range aux {
+					k := &aux[i]
+					pop := wo.beginvirtual()
+					f(k) // (1)
+					wo.endvirtual(pop)
+					if k.flags&flagBreakIteration > 0 { // (2)
+						break out
+					}
+				}
+			}
+		} else {
+			f(k)                                // (1)
+			if k.flags&flagBreakIteration > 0 { // (2)
+				break out
+			}
+		}
+	}
+}
+
+*/
 
 func (wo *World) topbreadthiter(pool []Sorm, f func(s, _ *Sorm)) {
 	wo.breadthiter(pool, f, false)
@@ -1149,6 +1217,10 @@ func followaligner(wo *World, c *Sorm, h bool) {
 		}
 
 		beginaxis(k)
+		// Stop laying out kids if we're clipped out of limit.
+		if c.flags&flagCrop > 0 && y > c.l.Y {
+			k.flags |= flagBreakIteration
+		}
 		k.p.Y = y
 		y += k.Size.Y
 		c.Size.X = max(c.Size.X, k.Size.X)
@@ -1179,8 +1251,8 @@ func (wo *World) prepass(_ *Sorm, c *Sorm, one bool) {
 	}
 
 	if wo.cropping == 0 {
-		// Defer scissored compounds for another pass, skip the whole subtree.
-		// TODO Nested scissors are impossible now.
+		// Defer cropped compounds for another pass, skip the whole subtree.
+		// TODO Nested crops are impossible now.
 		if c.flags&flagCrop > 0 {
 			wo.cropped = append(wo.cropped, c)
 			return
@@ -1344,11 +1416,30 @@ func (wo *World) Develop() {
 	vgo := wo.Vgo
 
 	vgo.ResetTransform()
-	root := &wo.pool[len(wo.pool)-1]
-	root.l.X = wo.Wwin
-	root.l.Y = wo.Hwin
 
-	pool := wo.pool[0:wo.rend]
+	pool := wo.pool
+	auxpool := wo.auxpool
+
+	// Don't relayout if tree is the same.
+	var chash [16]byte
+	wo.hasher.Sum((&chash)[:0])
+	skiplayout := chash == wo.oldhash
+	wo.oldhash = chash
+	if skiplayout {
+		// Pre-swap old and current, so we are drawing from the old pool.
+		pool = wo.old
+		auxpool = wo.auxold
+		wo.old, wo.pool = wo.pool, wo.old
+		wo.auxold, wo.auxpool = wo.auxpool, wo.auxold
+
+		goto skiplayout
+	}
+
+	{
+		root := &wo.pool[len(wo.pool)-1]
+		root.l.X = wo.Wwin
+		root.l.Y = wo.Hwin
+	}
 
 	for i := len(pool) - 1; i >= 0; i-- {
 		s := &pool[i]
@@ -1389,6 +1480,7 @@ func (wo *World) Develop() {
 	})
 	// After this point, (*Sorm).kidsiter won't work because indices are broken.
 
+skiplayout:
 	// Apply conditional paints, match drag-and-drop events, handle scrolls.
 	for i := len(pool) - 1; i >= 0; i-- {
 		s := &pool[i]
@@ -1432,17 +1524,17 @@ func (wo *World) Develop() {
 
 	// Draw.
 	// FIXME auxpool is not sorted.
-	wo.bottombreadthiter(pool, func(s, _ *Sorm) {
-		if s.tag <= 0 {
+	wo.bottombreadthiter(pool, func(c, _ *Sorm) {
+		if c.tag <= 0 {
 			return
 		}
 
-		if s.cropi > 0 && s.cropr.Intersect(s.Rectangle()) == (geom.Rectangle{}) {
+		if c.cropi > 0 && c.cropr.Intersect(c.Rectangle()) == (geom.Rectangle{}) {
 			return
 		}
 
-		*s = s.decimate()
-		// Set crop up.
+		s := c.decimate()
+		// Set the crop up.
 		vgo.ResetScissor()
 		if s.cropr.Dx() > 0 && s.cropr.Dy() > 0 {
 			x, y, w, h := rect2nvgxywh(s.cropr)
@@ -1473,7 +1565,7 @@ func (wo *World) Develop() {
 		case tagVectorText:
 		case tagCanvas:
 		}
-		shapeActions[s.tag](wo, s)
+		shapeActions[s.tag](wo, &s)
 		vgo.ResetTransform()
 	})
 
@@ -1486,26 +1578,26 @@ func (wo *World) Develop() {
 		vgo.SetStrokeWidth(1)
 		vgo.SetStrokePaint(hexpaint(`#00000020`))
 		vgo.BeginPath()
-		for _, s := range pool {
+		draw := func(s *Sorm) bool {
 			if s.Size.Y < .5 && s.Size.X < .5 {
-				continue
+				return true
 			}
-			s := s.decimate()
-			s.p.X -= 0.5
-			s.p.Y -= 0.5
-			if s.tag >= 0 {
-				wo.Vgo.Rect(float32(s.p.X), float32(s.p.Y), float32(s.Size.X), float32(s.Size.Y))
+			ss := s.decimate()
+			ss.p.X -= 0.5
+			ss.p.Y -= 0.5
+			if ss.tag >= 0 {
+				wo.Vgo.Rect(float32(ss.p.X), float32(ss.p.Y), float32(ss.Size.X), float32(ss.Size.Y))
+			}
+			return false
+		}
+		for i := range pool {
+			if draw(&pool[i]) {
+				continue
 			}
 		}
-		for _, s := range wo.auxpool {
-			if s.Size.Y < .5 && s.Size.X < .5 {
+		for i := range auxpool {
+			if draw(&auxpool[i]) {
 				continue
-			}
-			s := s.decimate()
-			s.p.X -= 0.5
-			s.p.Y -= 0.5
-			if s.tag >= 0 {
-				wo.Vgo.Rect(float32(s.p.X), float32(s.p.Y), float32(s.Size.X), float32(s.Size.Y))
 			}
 		}
 		vgo.ClosePath()
@@ -1514,34 +1606,30 @@ func (wo *World) Develop() {
 		vgo.SetStrokeWidth(0)
 		vgo.SetFillPaint(hexpaint(`#ff000020`))
 		vgo.BeginPath()
-		for _, s := range pool {
-			if s.cropi == 0 {
-				continue
+		draw2 := func(c *Sorm) bool {
+			if c.cropi == 0 {
+				return true
 			}
-			if s.Size.Y < .5 && s.Size.X < .5 {
-				continue
+			if c.Size.Y < .5 && c.Size.X < .5 {
+				return true
 			}
-			s := s.decimate()
+			s := c.decimate()
 			s.p.X -= 0.5
 			s.p.Y -= 0.5
 			if s.tag >= 0 {
 				wo.Vgo.Rect(float32(s.cropr.Min.X), float32(s.cropr.Min.Y),
 					float32(s.cropr.Dx()), float32(s.cropr.Dy()))
+			}
+			return false
+		}
+		for i := range pool {
+			if draw2(&pool[i]) {
+				continue
 			}
 		}
-		for _, s := range wo.auxpool {
-			if s.cropi == 0 {
+		for i := range auxpool {
+			if draw2(&auxpool[i]) {
 				continue
-			}
-			if s.Size.Y < .5 && s.Size.X < .5 {
-				continue
-			}
-			s := s.decimate()
-			s.p.X -= 0.5
-			s.p.Y -= 0.5
-			if s.tag >= 0 {
-				wo.Vgo.Rect(float32(s.cropr.Min.X), float32(s.cropr.Min.Y),
-					float32(s.cropr.Dx()), float32(s.cropr.Dy()))
 			}
 		}
 		vgo.ClosePath()
@@ -1558,6 +1646,9 @@ func (wo *World) Develop() {
 		}
 	}
 
+	// Swap pools.
+	// If layout step was skipped, it will return buffers to the correct order.
+	//
 	// Note that after sorting pool by order it can't be used to
 	// correctrly determine relationships.
 	// Hence it is applicable to the old pool, the only reason it is
@@ -1590,6 +1681,45 @@ func (wo *World) Develop() {
 			delete(wo.images, k)
 		}
 	}
+}
+
+// Next prepares the Contraption for rendering the next frame.
+// See package description for preferred use of Contraption.
+func (wo *World) Next() bool {
+	wo.MatchCount = 0
+
+	window := wo.Window
+	if window.ShouldClose() {
+		return false
+	}
+
+	// TODO Decouple backend and put more stuff in that .next().
+	wo.Events.next()
+
+	w, h := window.GetFramebufferSize()
+	gl.Viewport(0, 0, int32(w), int32(h))
+
+	w, h = window.GetSize()
+	wo.Wwin, wo.Hwin = float64(w), float64(h)
+	wo.Events.Viewport = geom.Pt(float64(w), float64(h))
+
+	cl := hex(`#ffffff`)
+	gl.ClearColor(cl.R, cl.G, cl.B, cl.A)
+	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT)
+	gl.Enable(gl.BLEND)
+	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+	gl.Enable(gl.CULL_FACE)
+	gl.Disable(gl.DEPTH_TEST)
+
+	sc, _ := window.GetContentScale()
+	wo.Vgo.BeginFrame(w, h, float32(math.Ceil(float64(sc))))
+
+	wo.Vgo.SetFontFace(`go`)
+	wo.Vgo.SetFontSize(11)
+
+	wo.hasher.Reset()
+
+	return true
 }
 
 func (wo *World) recorder() {
@@ -1720,6 +1850,8 @@ func New(config Config) (wo *World) {
 
 	wo = &World{}
 	concretenew(config, wo)
+
+	wo.hasher = fnv.New128a()
 
 	wo.Events = NewEventTracer(wo.Window.window, config.ReplayReader)
 	wo.sinks = make([]func(any), 1)
