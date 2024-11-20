@@ -44,8 +44,8 @@ func _() {
 	_ = x[tagLimit - -106]
 	_ = x[tagVfollow - -107]
 	_ = x[tagHfollow - -108]
-	_ = x[tagDontDecimate - -109]
-	_ = x[tagDecimate - -110]
+	_ = x[tagNoround - -109]
+	_ = x[tagRound - -110]
 }
 
 const (

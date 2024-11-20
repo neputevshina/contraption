@@ -331,24 +331,24 @@ func (wo *World) Key(k any) (v *any) {
 	return
 }
 
-func (wo *World) Nodecimate() (s Sorm) {
+func (wo *World) Noround() (s Sorm) {
 	s = wo.beginsorm()
-	s.tag = tagDontDecimate
+	s.tag = tagNoround
 	wo.endsorm(s)
 	return
 }
-func dontdecimaterun(wo *World, c, m *Sorm) {
-	c.flags |= flagDontDecimate
+func noroundrun(wo *World, c, m *Sorm) {
+	c.flags |= flagNoround
 }
 
-func (wo *World) Decimate() (s Sorm) {
+func (wo *World) Round() (s Sorm) {
 	s = wo.beginsorm()
-	s.tag = tagDecimate
+	s.tag = tagRound
 	wo.endsorm(s)
 	return
 }
-func decimaterun(wo *World, c, m *Sorm) {
-	c.flags |= flagDecimate
+func roundrun(wo *World, c, m *Sorm) {
+	c.flags |= flagRound
 }
 
 func (wo *World) Hscroll(idx *Index, du float64) (s Sorm) {

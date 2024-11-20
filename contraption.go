@@ -233,8 +233,8 @@ const (
 	flagNegativeOvry
 	flagNotCropped
 	flagIteratedScissor
-	flagDontDecimate
-	flagDecimate
+	flagNoround
+	flagRound
 )
 
 //go:generate stringer -type=tagkind -trimprefix=tag
@@ -289,8 +289,8 @@ const (
 	tagLimit // Limit must be executed after update of a matrix, but before aligners, because it influences size.
 	tagVfollow
 	tagHfollow
-	tagDontDecimate
-	tagDecimate
+	tagNoround
+	tagRound
 )
 const (
 	alignerNone alignerkind = iota
@@ -343,8 +343,8 @@ func init() {
 	preActions[-100-tagHshrink] = hshrinkrun
 	preActions[-100-tagVshrink] = vshrinkrun
 	preActions[-100-tagLimit] = limitrun
-	preActions[-100-tagDontDecimate] = dontdecimaterun
-	preActions[-100-tagDecimate] = decimaterun
+	preActions[-100-tagNoround] = noroundrun
+	preActions[-100-tagRound] = roundrun
 
 	alignerActions[alignerNone] = noaligner
 	alignerActions[alignerVfollow] = vfollowaligner
@@ -622,7 +622,7 @@ func (s Sorm) decimate() Sorm {
 }
 
 func (s *Sorm) decimated() bool {
-	return s.flags&flagDecimate > 0 || !(s.flags&flagDontDecimate > 0)
+	return s.flags&flagRound > 0 || !(s.flags&flagNoround > 0)
 }
 
 // BaseWorld returns itself.
@@ -1206,8 +1206,8 @@ func (wo *World) prepass(_ *Sorm, c *Sorm, one bool) {
 	c.kidsiter(wo, kiargs{firstloop: one}, func(k *Sorm) {
 		// Cascade matrices and some flags
 		k.m = c.m
-		k.flags |= c.flags & flagDontDecimate
-		k.flags |= c.flags & flagDecimate
+		k.flags |= c.flags & flagNoround
+		k.flags |= c.flags & flagRound
 		wo.prepass(c, k, false)
 		if wo.cropping == 0 {
 			if c.flags&flagCrop == 0 && k.flags&flagCrop == 0 {
