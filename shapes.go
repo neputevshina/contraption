@@ -443,9 +443,9 @@ func illustrationrun(wo *World, s *Sorm) {
 // Framebuffer is a raw image, possibly frequently updated.
 //
 // Every sizing rule of Illustration applies to Framebuffer.
-// func (wo *World) Framebuffer(w, h complex128, mode string, fbw, fbh int, src []byte, deadline time.Time) (s Sorm) {
+// func (wo *World) Framebuffer(fb *Framebuffer, w, h complex128, mode string) (s Sorm) {
 // 	s = wo.newSorm()
-// 	s.tag = tagSequence
+// 	s.tag = tagFramebuffer
 // 	s.key = &src[0]
 // 	return s
 // }
