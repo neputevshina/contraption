@@ -386,7 +386,8 @@ type World struct {
 
 	pools
 
-	Vgo *nanovgo.Context
+	Vgo  *Context
+	cctx any
 
 	Wwin, Hwin float64
 
@@ -468,7 +469,7 @@ type Sorm struct {
 
 	fill    nanovgo.Paint
 	stroke  nanovgo.Paint
-	strokew float32
+	strokew float64
 
 	fontid  int
 	vecfont *Font
@@ -485,7 +486,7 @@ type Sorm struct {
 	condstroke     func(rect geom.Rectangle) nanovgo.Paint
 	condfillstroke func(rect geom.Rectangle) (nanovgo.Paint, nanovgo.Paint)
 	cond           func(m Matcher)
-	canvas         func(vgo *nanovgo.Context, wt geom.Geom, rect geom.Rectangle)
+	canvas         func(vgo *Context, wt geom.Geom, rect geom.Rectangle)
 
 	sinkid int
 
@@ -695,7 +696,7 @@ func (s Sorm) Stroke(p nanovgo.Paint) Sorm {
 	return s
 }
 
-func (s Sorm) Strokewidth(w float32) Sorm {
+func (s Sorm) Strokewidth(w float64) Sorm {
 	s.strokew = w
 	s.flags |= flagSetStrokewidth
 	return s
@@ -1222,7 +1223,7 @@ func (wo *World) prepass(_ *Sorm, c *Sorm, one bool) {
 		if k.tag == tagText {
 			s := k
 			wo.Vgo.SetFontFaceID(s.fontid)
-			wo.Vgo.SetFontSize(float32(k.Size.Y))
+			wo.Vgo.SetFontSize(k.Size.Y)
 			_, abcd := wo.Vgo.TextBounds(0, 0, s.key.(string))
 			_, space := wo.Vgo.TextBounds(0, 0, " ")
 			s.Size.X = float64(abcd[2]-abcd[0]) - float64(space[2]-space[0])
@@ -1478,10 +1479,10 @@ skiplayout:
 		vgo.ResetScissor()
 		if s.cropr.Dx() > 0 && s.cropr.Dy() > 0 {
 			x, y, w, h := rect2nvgxywh(s.cropr)
-			x = float32(math.Floor(float64(x)))
-			y = float32(math.Floor(float64(y)))
-			w = float32(math.Ceil(float64(w)))
-			h = float32(math.Ceil(float64(h)))
+			x = math.Floor(float64(x))
+			y = math.Floor(float64(y))
+			w = math.Ceil(float64(w))
+			h = math.Ceil(float64(h))
 			x -= 0.5
 			y -= 0.5
 			vgo.Scissor(x, y, w, h)
@@ -1526,7 +1527,7 @@ skiplayout:
 			ss.p.X -= 0.5
 			ss.p.Y -= 0.5
 			if ss.tag >= 0 {
-				wo.Vgo.Rect(float32(ss.p.X), float32(ss.p.Y), float32(ss.Size.X), float32(ss.Size.Y))
+				wo.Vgo.Rect(ss.p.X, ss.p.Y, ss.Size.X, ss.Size.Y)
 			}
 			return false
 		}
@@ -1557,8 +1558,8 @@ skiplayout:
 			s.p.X -= 0.5
 			s.p.Y -= 0.5
 			if s.tag >= 0 {
-				wo.Vgo.Rect(float32(s.cropr.Min.X), float32(s.cropr.Min.Y),
-					float32(s.cropr.Dx()), float32(s.cropr.Dy()))
+				wo.Vgo.Rect(s.cropr.Min.X, s.cropr.Min.Y,
+					s.cropr.Dx(), s.cropr.Dy())
 			}
 			return false
 		}
@@ -1652,9 +1653,9 @@ func (wo *World) Next() bool {
 	gl.Disable(gl.DEPTH_TEST)
 
 	sc, _ := window.GetContentScale()
-	wo.Vgo.BeginFrame(w, h, float32(math.Ceil(float64(sc))))
+	wo.Vgo.BeginFrame(w, h, math.Ceil(float64(sc)))
 
-	wo.Vgo.SetFontFace(`go`)
+	wo.Vgo.SetFontFaceID(1)
 	wo.Vgo.SetFontSize(11)
 
 	wo.hasher.Reset()
@@ -1703,13 +1704,13 @@ func (wo *World) recorder() {
 
 		vgo.BeginPath()
 		t := wo.Events.Trace[0].Pt
-		vgo.Circle(float32(t.X), float32(t.Y), 2)
+		vgo.Circle(t.X, t.Y, 2)
 		vgo.Fill()
 
 		fid := wo.nvgofontids[0]
 		vgo.SetFontFaceID(fid)
 		vgo.SetFillColor(hex(`#000000`))
-		vgo.SetFontSize(float32(12 * wo.capmap[fid]))
+		vgo.SetFontSize(12 * wo.capmap[fid])
 		vgo.Text(16+8, 16+5, wo.Events.Trace[0].valuestring())
 		adv, _ := vgo.TextBounds(16+8, 16+5, wo.Events.Trace[0].valuestring())
 		vgo.SetFillColor(hex(`#00000050`))
@@ -1789,6 +1790,7 @@ func New(config Config) (wo *World) {
 	runtime.LockOSThread()
 
 	wo = &World{}
+	wo.Vgo = &Context{}
 	concretenew(config, wo)
 
 	wo.hasher = fnv.New128a()

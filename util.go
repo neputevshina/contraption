@@ -404,11 +404,11 @@ func cceil(c complex128) complex128 {
 	return complex(math.Ceil(real(c)), imag(c))
 }
 
-func rect2nvgxywh(r geom.Rectangle) (x, y, w, h float32) {
-	x = float32(r.Min.X)
-	y = float32(r.Min.Y)
-	w = float32(r.Dx())
-	h = float32(r.Dy())
+func rect2nvgxywh(r geom.Rectangle) (x, y, w, h float64) {
+	x = r.Min.X
+	y = r.Min.Y
+	w = r.Dx()
+	h = r.Dy()
 	return
 }
 

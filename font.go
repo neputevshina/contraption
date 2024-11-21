@@ -32,7 +32,7 @@ type Font struct {
 	buf        sfnt.Buffer
 }
 
-func NewFont(vgo *nanovgo.Context, data []byte, name string) (*Font, error) {
+func NewFont(vgo *Context, data []byte, name string) (*Font, error) {
 	f, err := sfnt.Parse(data)
 	if err != nil {
 		return nil, err
@@ -175,12 +175,12 @@ func (f *Font) TrueXBearing(r rune) float64 {
 	return f.Width(r) - f.PureAdvance(r)
 }
 
-func Replay(vg *nanovgo.Context, segs []Segment) {
+func Replay(vg *Context, segs []Segment) {
 	for _, s := range segs {
 		a, b, c := s.Args[0], s.Args[1], s.Args[2]
-		ax, ay := float32(a.X), float32(a.Y)
-		bx, by := float32(b.X), float32(b.Y)
-		cx, cy := float32(c.X), float32(c.Y)
+		ax, ay := a.X, a.Y
+		bx, by := b.X, b.Y
+		cx, cy := c.X, c.Y
 		switch s.Op {
 		case 'M':
 			vg.MoveTo(ax, ay)
@@ -194,15 +194,15 @@ func Replay(vg *nanovgo.Context, segs []Segment) {
 	}
 }
 
-func Makealine(vg *nanovgo.Context, font *Font, size float64, runes []rune) float64 {
+func Makealine(vg *Context, font *Font, size float64, runes []rune) float64 {
 	return makealinerd(vg, font, size, Runes(runes), false, true)
 }
 
-func MakealineReader(vg *nanovgo.Context, font *Font, size float64, rd io.RuneScanner) float64 {
+func MakealineReader(vg *Context, font *Font, size float64, rd io.RuneScanner) float64 {
 	return makealinerd(vg, font, size, rd, false, true)
 }
 
-func MakealineStrict(vg *nanovgo.Context, font *Font, size float64, runes []rune) float64 {
+func MakealineStrict(vg *Context, font *Font, size float64, runes []rune) float64 {
 	return makealinerd(vg, font, size, Runes(runes), true, true)
 }
 
@@ -210,7 +210,7 @@ func (font *Font) Measure(cap float64, runes []rune) float64 {
 	return makealinerd(nil, font, cap, Runes(runes), false, false)
 }
 
-func makealinerd(vg *nanovgo.Context, font *Font, cap float64, runes io.RuneScanner, extendedBox bool, draw bool) float64 {
+func makealinerd(vg *Context, font *Font, cap float64, runes io.RuneScanner, extendedBox bool, draw bool) float64 {
 	em := font.Captoem(cap)
 
 	r, _, err := runes.ReadRune()
@@ -233,12 +233,12 @@ func makealinerd(vg *nanovgo.Context, font *Font, cap float64, runes io.RuneScan
 	}
 	if draw {
 		vg.Save()
-		vg.Scale(float32(em), float32(em))
+		vg.Scale(em, em)
 	}
 	for err == nil {
 		if draw {
 			vg.Save()
-			vg.Translate(float32(x), 0)
+			vg.Translate(x, 0)
 			Replay(vg, font.Segments(r))
 			vg.PathWinding(nanovgo.Hole)
 			vg.Restore()

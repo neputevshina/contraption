@@ -69,7 +69,7 @@ func (wo *World) generalNewText(font []byte, kind tagkind) func(size float64, st
 		s.vecfont = f
 		s.fontid = f.Vgoid
 		// wo.Vgo.SetFontFaceID(s.fontid)
-		// wo.Vgo.SetFontSize(float32(size))
+		// wo.Vgo.SetFontSize(size)
 		// _, abcd := wo.Vgo.TextBounds(0, 0, str)
 		// _, space := wo.Vgo.TextBounds(0, 0, " ")
 		// s.Size.X = float64(abcd[2]-abcd[0]) - float64(space[2]-space[0])
@@ -95,8 +95,8 @@ func generaltextrun(kind tagkind) func(wo *World, s *Sorm) {
 		wo.Vgo.ResetTransform()
 		if horizontal {
 			// Adjust baseline so 0y0 is top left.
-			wo.Vgo.SetTransform(nanovgo.TranslateMatrix(float32(s.p.X), float32(s.p.Y)+float32(s.Size.Y)))
-			wo.Vgo.SetFontSize(float32(s.Size.Y))
+			wo.Vgo.SetTransform(nanovgo.TranslateMatrix(float32(s.p.X), float32(s.p.Y+s.Size.Y)))
+			wo.Vgo.SetFontSize(s.Size.Y)
 		} else {
 			wo.Vgo.SetTransform(nanovgo.TranslateMatrix(float32(s.p.X), float32(s.p.Y)))
 			if kind == tagTopDownText {
@@ -104,7 +104,7 @@ func generaltextrun(kind tagkind) func(wo *World, s *Sorm) {
 			} else if kind == tagBottomUpText {
 				wo.Vgo.SetTransform(nanovgo.RotateMatrix(-nanovgo.PI / 2))
 			}
-			wo.Vgo.SetFontSize(float32(s.Size.X))
+			wo.Vgo.SetFontSize(s.Size.X)
 		}
 		wo.Vgo.SetFontFaceID(s.fontid)
 		wo.Vgo.SetFillPaint(s.fill)
@@ -197,7 +197,7 @@ func (wo *World) Circle(d float64) (s Sorm) {
 func circlerun(wo *World, s *Sorm) {
 	s.paint(wo, func() {
 		r := s.Size.X / 2
-		wo.Vgo.Circle(float32(s.p.X+r), float32(s.p.Y+r), float32(r))
+		wo.Vgo.Circle(s.p.X+r, s.p.Y+r, r)
 	})
 }
 
@@ -214,7 +214,7 @@ func (wo *World) Rectangle(w, h complex128) (s Sorm) {
 }
 func rectrun(wo *World, s *Sorm) {
 	s.paint(wo, func() {
-		wo.Vgo.Rect(float32(s.p.X), float32(s.p.Y), float32(s.Size.X), float32(s.Size.Y))
+		wo.Vgo.Rect(s.p.X, s.p.Y, s.Size.X, s.Size.Y)
 	})
 }
 
@@ -232,7 +232,7 @@ func (wo *World) Roundrect(w, h complex128, r float64) (s Sorm) {
 }
 func roundrectrun(wo *World, s *Sorm) {
 	s.paint(wo, func() {
-		wo.Vgo.RoundedRect(float32(s.p.X), float32(s.p.Y), float32(s.Size.X), float32(s.Size.Y), float32(s.r))
+		wo.Vgo.RoundedRect(s.p.X, s.p.Y, s.Size.X, s.Size.Y, s.r)
 	})
 }
 
@@ -278,18 +278,18 @@ func equationrun(wo *World, s *Sorm) {
 		a := wo.eqnCache[s.key]
 		wo.Vgo.ResetTransform()
 		wo.Vgo.SetTransform(nanovgo.TranslateMatrix(float32(s.p.X), float32(s.p.Y)))
-		wo.Vgo.MoveTo(float32(a[0].X), float32(a[0].Y))
+		wo.Vgo.MoveTo(a[0].X, a[0].Y)
 		for i := range a {
 			if i == 0 {
 				continue
 			}
-			wo.Vgo.LineTo(float32(a[i].X), float32(a[i].Y))
+			wo.Vgo.LineTo(a[i].X, a[i].Y)
 		}
 	})
 }
 
 // Canvas gives a direct access to Nanovgo for painting a vector image.
-func (wo *World) Canvas(w, h complex128, run func(vgo *nanovgo.Context, wt geom.Geom, rect geom.Rectangle)) (s Sorm) {
+func (wo *World) Canvas(w, h complex128, run func(vgo *Context, wt geom.Geom, rect geom.Rectangle)) (s Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagCanvas
 	s.canvas = run
@@ -434,7 +434,7 @@ func illustrationrun(wo *World, s *Sorm) {
 
 	vgo.BeginPath()
 	vgo.SetFillPaint(nanovgo.ImagePattern(float32(o.X), float32(o.Y), float32(frame.X), float32(frame.Y), 0, u.texid, 1))
-	vgo.Rect(float32(o.X), float32(o.Y), float32(frame.X), float32(frame.Y))
+	vgo.Rect(o.X, o.Y, frame.X, frame.Y)
 	vgo.Fill()
 
 	vgo.Restore()

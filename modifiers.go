@@ -110,7 +110,7 @@ func strokerun(wo *World, s, m *Sorm) {
 func (wo *World) Strokewidth(w float64) (s Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagStrokewidth
-	s.strokew = float32(w)
+	s.strokew = w
 	wo.endsorm(s)
 	return
 }

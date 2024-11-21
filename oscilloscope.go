@@ -16,11 +16,11 @@ func (wo *World) displayOscilloscope() Sorm {
 			// wo.Limit(wo.Wwin+1, wo.Hwin+1),
 			wo.Compound(
 				wo.Rectangle(complex(wo.Wwin+1, 0), complex(wo.Hwin+1, 0)).Fill(hexpaint(`#00000060`)), // FIXME Must be -1, -1, is not working even with limit.
-				wo.Canvas(-1, -1, func(vgo *nanovgo.Context, _ geom.Geom, rect geom.Rectangle) {
+				wo.Canvas(-1, -1, func(vgo *Context, _ geom.Geom, rect geom.Rectangle) {
 					vgo.SetFillColor(hex(`#ffffff`))
 					vgo.SetFontSize(12)
 					vgo.SetTextAlign(nanovgo.AlignLeft)
-					y := float32(0.0)
+					y := 0.0
 					for _, s := range collect(wo.Events.Trace, func(e EventPoint) string { return sprint(e.String()) }) {
 						vgo.Text(12, 14+y, s)
 						y += 14

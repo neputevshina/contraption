@@ -35,7 +35,7 @@ func concretenew(config Config, wo *World) {
 		glfw.SwapInterval(1)
 	}
 
-	wo.Vgo, err = nanovgo.NewContext(0)
+	wo.cctx, err = nanovgo.NewContext(0)
 	if err != nil {
 		panic(err)
 	}
@@ -61,6 +61,8 @@ func (wo *World) windowDevelop() {
 	}
 	wo.BeforeVgo = nil
 	wo.Vgo.EndFrame()
+	runcontext(wo.cctx, wo.Vgo)
+
 	if wo.Events.tempcur == 0 {
 		wo.Window.SwapBuffers()
 	}
