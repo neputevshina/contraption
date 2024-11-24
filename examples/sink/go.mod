@@ -3,12 +3,13 @@ module github.com/neputevshina/contraption/examples/sink
 go 1.22.5
 
 replace github.com/neputevshina/contraption => ../../
+replace github.com/neputevshina/contraption/nanovgo => ../../nanovgo
 
 require (
 	github.com/go-gl/glfw/v3.3/glfw v0.0.0-20240506104042-037f3cc74f2a
 	github.com/neputevshina/contraption v0.0.0-20240831004727-2430eed6a7fd
 	github.com/neputevshina/geom v0.0.0-20231211132238-0cb016e95618
-	github.com/neputevshina/nanovgo v0.0.0-20241104171014-8329a8bbb5cf
+	github.com/neputevshina/contraption/nanovgo v0.0.0-20241104171014-8329a8bbb5cf
 	golang.org/x/image v0.19.0
 )
 

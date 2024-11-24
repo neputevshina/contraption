@@ -326,6 +326,23 @@ func (wo *World) Examples() Sorm {
 					wo.Crop(),
 					wo.Illustration(-1, -1, "zoom", okcomputer))
 			}),
+			// wo.Example(`Canvas`, func() Sorm {
+			// 	return wo.Compound(
+			// 		wo.Limit(100, 100),
+			// 		wo.Halign(numbox),
+			// 		wo.Canvas(-1, -1, func(vgo *contraption.Context, wt geom.Geom, rect geom.Rectangle) {
+			// 			vgo.SetTransform(geom2nanovgo(wt))
+			// 			vgo.BeginPath()
+			// 			vgo.SetFillPaint(yellow)
+			// 			vgo.Rect(10, 10, 10, 10)
+			// 			vgo.Fill()
+			// 			vgo.BeginPath()
+			// 			vgo.SetFillPaint(dark)
+			// 			vgo.Rect(20, 20, 10, 10)
+			// 			vgo.Rect(30, 40, 10, 10)
+			// 			vgo.Fill()
+			// 		}))
+			// }),
 		))
 }
 

@@ -3,7 +3,8 @@ package main
 import (
 	"log"
 
-	"github.com/neputevshina/nanovgo"
+	"github.com/neputevshina/geom"
+	"github.com/neputevshina/contraption/nanovgo"
 )
 
 func hex(s string) (c nanovgo.Color) {
@@ -35,4 +36,12 @@ var println = log.Println
 
 func lerp(a, b, c float64) float64 {
 	return a*(1-c) + b*c
+}
+
+func geom2nanovgo(g geom.Geom) nanovgo.TransformMatrix {
+	return nanovgo.TransformMatrix{
+		float32(g[0][0]), float32(g[0][1]),
+		float32(g[1][0]), float32(g[1][1]),
+		float32(g[2][0]), float32(g[2][1]),
+	}
 }

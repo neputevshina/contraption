@@ -14,8 +14,8 @@ github.com/neputevshina/contraption v0.0.0-20240826020825-d198aacddaff h1:UyFKaF
 github.com/neputevshina/contraption v0.0.0-20240826020825-d198aacddaff/go.mod h1:+YUbR/HohPtkqSYXPu0KAHFfzgqadomVhwW49hs25mc=
 github.com/neputevshina/geom v0.0.0-20231211132238-0cb016e95618 h1:gBHn2xKXi+/ELHiSNk1vX23nrif+mj/6KvBDB5EVIFw=
 github.com/neputevshina/geom v0.0.0-20231211132238-0cb016e95618/go.mod h1:RcgNVL/f6DPTQtCjCKW9x4WXUa421NKaBenrAnOPSl0=
-github.com/neputevshina/nanovgo v0.0.0-20240706040057-6232d7963035 h1:5oDO6otaOU1FaSqdd8+2x70jYg2tsf2NGKQcs779JIo=
-github.com/neputevshina/nanovgo v0.0.0-20240706040057-6232d7963035/go.mod h1:Ncb1o+b16lA/ctEjfi1ArSOdNhxIZ8oaFDD+ouvcKeA=
+github.com/neputevshina/contraption/nanovgo v0.0.0-20240706040057-6232d7963035 h1:5oDO6otaOU1FaSqdd8+2x70jYg2tsf2NGKQcs779JIo=
+github.com/neputevshina/contraption/nanovgo v0.0.0-20240706040057-6232d7963035/go.mod h1:Ncb1o+b16lA/ctEjfi1ArSOdNhxIZ8oaFDD+ouvcKeA=
 github.com/shibukawa/nanovgo v0.0.0-20160822101109-9141d09b3652 h1:7ORiLBcdIPEjwwbbjUpYIvy3Z6syqAhnfY/3m5DSs5M=
 github.com/shibukawa/nanovgo v0.0.0-20160822101109-9141d09b3652/go.mod h1:A/HWQKoHKEbx5r+LI6Lns9g6vSROSGw59APgU2Zr+Cc=
 golang.design/x/clipboard v0.7.0 h1:4Je8M/ys9AJumVnl8m+rZnIvstSnYj1fvzqYrU3TXvo=

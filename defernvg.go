@@ -4,7 +4,7 @@ import (
 	"image"
 	"reflect"
 
-	"github.com/neputevshina/nanovgo"
+	"github.com/neputevshina/contraption/nanovgo"
 )
 
 type nvguop struct {

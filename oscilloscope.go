@@ -2,7 +2,7 @@ package contraption
 
 import (
 	"github.com/neputevshina/geom"
-	"github.com/neputevshina/nanovgo"
+	"github.com/neputevshina/contraption/nanovgo"
 )
 
 type Oscilloscope struct {

@@ -7,7 +7,7 @@ import (
 	"strconv"
 
 	"github.com/neputevshina/geom"
-	"github.com/neputevshina/nanovgo"
+	"github.com/neputevshina/contraption/nanovgo"
 )
 
 func (s Sorm) paint(wo *World, f func()) {
@@ -304,9 +304,7 @@ func canvasrun(wo *World, s *Sorm) {
 	vgo := wo.Vgo
 
 	vgo.Save()
-	if s.r > 0 {
-		vgo.SetTransform(geom2nanovgo(s.m.Translate(s.p.X, s.p.Y)))
-	}
+	vgo.SetTransform(geom2nanovgo(s.m.Translate(s.p.X, s.p.Y)))
 	if s.fill != (nanovgo.Paint{}) {
 		vgo.SetFillPaint(s.fill)
 	}

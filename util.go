@@ -16,7 +16,7 @@ import (
 	"unsafe"
 
 	"github.com/neputevshina/geom"
-	"github.com/neputevshina/nanovgo"
+	"github.com/neputevshina/contraption/nanovgo"
 	"golang.org/x/exp/constraints"
 	"golang.org/x/image/font/sfnt"
 	"golang.org/x/image/math/fixed"

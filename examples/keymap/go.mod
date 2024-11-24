@@ -11,7 +11,7 @@ require (
 	github.com/h2non/filetype v1.1.3
 	github.com/neputevshina/contraption v0.0.0-20240826020825-d198aacddaff
 	github.com/neputevshina/geom v0.0.0-20231211132238-0cb016e95618
-	github.com/neputevshina/nanovgo v0.0.0-20240706040057-6232d7963035
+	github.com/neputevshina/contraption/nanovgo v0.0.0-20240706040057-6232d7963035
 	github.com/shibukawa/nanovgo v0.0.0-20160822101109-9141d09b3652
 	golang.design/x/clipboard v0.7.0
 	golang.org/x/exp v0.0.0-20240823005443-9b4947da3948

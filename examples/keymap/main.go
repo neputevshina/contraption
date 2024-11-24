@@ -11,7 +11,7 @@ import (
 	"github.com/neputevshina/contraption"
 
 	"github.com/neputevshina/geom"
-	"github.com/neputevshina/nanovgo"
+	"github.com/neputevshina/contraption/nanovgo"
 	"golang.org/x/image/font/gofont/goregular"
 )
 

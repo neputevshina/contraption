@@ -1,7 +1,7 @@
 package contraption
 
 import (
-	"github.com/neputevshina/nanovgo"
+	"github.com/neputevshina/contraption/nanovgo"
 	"golang.org/x/exp/shiny/iconvg"
 )
 

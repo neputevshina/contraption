@@ -11,7 +11,7 @@ import (
 	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/h2non/filetype"
 	"github.com/neputevshina/geom"
-	"github.com/neputevshina/nanovgo"
+	"github.com/neputevshina/contraption/nanovgo"
 )
 
 func concretenew(config Config, wo *World) {

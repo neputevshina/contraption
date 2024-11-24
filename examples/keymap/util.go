@@ -1,6 +1,6 @@
 package main
 
-import "github.com/neputevshina/nanovgo"
+import "github.com/neputevshina/contraption/nanovgo"
 
 func hex(s string) (c nanovgo.Color) {
 	if !(len(s) == 9 || len(s) == 7) || s[0] != '#' {

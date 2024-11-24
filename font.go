@@ -7,7 +7,7 @@ import (
 
 	"github.com/golang/freetype/truetype"
 	"github.com/neputevshina/geom"
-	"github.com/neputevshina/nanovgo"
+	"github.com/neputevshina/contraption/nanovgo"
 	"golang.org/x/exp/constraints"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/sfnt"

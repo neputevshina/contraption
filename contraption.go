@@ -207,7 +207,7 @@ import (
 
 	"github.com/go-gl/gl/v2.1/gl"
 	"github.com/neputevshina/geom"
-	"github.com/neputevshina/nanovgo"
+	"github.com/neputevshina/contraption/nanovgo"
 	"golang.org/x/exp/slices"
 )
 
