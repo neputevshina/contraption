@@ -1524,8 +1524,8 @@ func (c *Context) flattenPaths() {
 }
 
 func (c *Context) FlushTextTexture(fs *fontstashmini.FontStash, hfont int) {
-	dirty := fs.ValidateTexture()
-	if dirty != ([4]int{}) {
+	dirty, ok := fs.ValidateTexture()
+	if !ok {
 		fontImage := c.fontImages[hfont]
 		// Update texture
 		if fontImage != 0 {
@@ -1546,8 +1546,8 @@ func (c *Context) AllocTextAtlas(fs *fontstashmini.FontStash, hfont int) (newhfo
 	}
 	var iw, ih int
 	// if next fontImage already have a texture
-	if c.fontImages[hfont+1] != 0 {
-		iw, ih, _ = c.ImageSize(c.fontImages[hfont+1])
+	if c.fontImages[hfont] != 0 {
+		iw, ih, _ = c.ImageSize(c.fontImages[hfont])
 	} else { // calculate the new font image size and create it.
 		iw, ih, _ = c.ImageSize(c.fontImages[hfont])
 		if iw > ih {
@@ -1576,7 +1576,9 @@ func (c *Context) RenderText(vertexes []Vertex) {
 	paint.innerColor.A *= state.alpha
 	paint.outerColor.A *= state.alpha
 
+	// for i := 0; i < len(vertexes); i += 4 {
 	c.params.renderTriangleStrip(&paint, &state.scissor, vertexes)
+	// }
 
 	c.drawCallCount++
 	c.textTriCount += len(vertexes) / 3

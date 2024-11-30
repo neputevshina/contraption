@@ -522,9 +522,9 @@ func (c *Context) TextRune(x, y float64, runes []rune) float64 {
 	}
 
 	c.fs.SetSize(float32(c.fontsiz * scale))
-	c.fs.SetAlign(fontstashmini.ALIGN_LEFT)
 	c.fs.SetSpacing(float32(c.lsp * scale))
 	c.fs.SetBlur(float32(c.fblur * scale))
+	c.fs.SetAlign(fontstashmini.ALIGN_LEFT)
 	c.fs.SetFont(c.hfont)
 
 	left := len(c.SpriteUnits)
@@ -624,12 +624,12 @@ func (c *Context) TextBounds(x, y float64, runes []rune) (float64, geom.Rectangl
 	c.fs.SetBlur(float32(c.fblur * scale))
 	c.fs.SetFont(c.hfont)
 
-	width, bounds := c.fs.TextBoundsOfRunes(float32(x*scale), float32(y*scale), runes)
-	// if bounds != (geom.Rectangle{}) {
-	bounds.Min.Y, bounds.Max.Y = c.fs.LineBounds(float32(y * scale))
-	bounds.Max = bounds.Max.Mul(invScale)
-	bounds.Min = bounds.Min.Mul(invScale)
-	// }
+	width, bounds, ok := c.fs.TextBoundsOfRunes(float32(x*scale), float32(y*scale), runes)
+	if !ok {
+		bounds.Min.Y, bounds.Max.Y = c.fs.LineBounds(float32(y * scale))
+		bounds.Max = bounds.Max.Mul(invScale)
+		bounds.Min = bounds.Min.Mul(invScale)
+	}
 	return float64(width) * invScale, bounds
 }
 func (c *Context) TextBox(x, y, breakRowWidth float64, str string) {

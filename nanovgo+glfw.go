@@ -424,6 +424,10 @@ func runcontext(concrete any, c *Context) {
 			vidx := 0
 			invScale := l.args[0]
 
+			_, ok := vgo.AllocTextAtlas(c.fs, l.hfont)
+			if !ok {
+				panic(``)
+			}
 			for i := range sus {
 				quad := sus[i]
 				// Transform corners.
@@ -442,10 +446,6 @@ func runcontext(concrete any, c *Context) {
 				vtxb[vidx+2] = vtx(c4, c5, quad.Tc.Max.X, quad.Tc.Max.Y)
 				vtxb[vidx+3] = vtx(c6, c7, quad.Tc.Min.X, quad.Tc.Max.Y)
 				vidx += 4
-			}
-			_, ok := vgo.AllocTextAtlas(c.fs, l.hfont)
-			if !ok {
-				panic(``)
 			}
 			vgo.FlushTextTexture(c.fs, l.hfont)
 			vgo.RenderText(vtxb)

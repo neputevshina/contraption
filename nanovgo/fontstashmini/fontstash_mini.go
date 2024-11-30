@@ -218,7 +218,7 @@ func (stash *FontStash) LineBounds(y float32) (minY, maxY float64) {
 	return
 }
 
-func (stash *FontStash) ValidateTexture() (dirty [4]int) {
+func (stash *FontStash) ValidateTexture() (dirty [4]int, ok bool) {
 	if stash.dirtyRect[0] < stash.dirtyRect[2] && stash.dirtyRect[1] < stash.dirtyRect[3] {
 		copy(dirty[0:4], stash.dirtyRect[:])
 		stash.dirtyRect[0] = stash.params.width
@@ -226,6 +226,7 @@ func (stash *FontStash) ValidateTexture() (dirty [4]int) {
 		stash.dirtyRect[2] = 0
 		stash.dirtyRect[3] = 0
 	}
+	ok = false
 	return
 }
 
@@ -261,14 +262,14 @@ func (stash *FontStash) ResetAtlas(width, height int) {
 // 	return stash.TextBoundsOfRunes(x, y, []rune(str))
 // }
 
-func (stash *FontStash) TextBoundsOfRunes(x, y float32, runes []rune) (float32, geom.Rectangle) {
+func (stash *FontStash) TextBoundsOfRunes(x, y float32, runes []rune) (float32, geom.Rectangle, bool) {
 	state := stash.state
 	prevGlyphIndex := -1
 	size := int(state.size * 10.0)
 	blur := int(state.blur)
 
 	if len(stash.fonts) < state.font+1 {
-		return 0, geom.Rectangle{}
+		return 0, geom.Rectangle{}, false
 	}
 	font := stash.fonts[state.font]
 
@@ -315,7 +316,7 @@ func (stash *FontStash) TextBoundsOfRunes(x, y float32, runes []rune) (float32, 
 		minX -= advance * 0.5
 		maxX -= advance * 0.5
 	}
-	return advance, geom.Rect(float64(minX), float64(minY), float64(maxX), float64(maxY))
+	return advance, geom.Rect(float64(minX), float64(minY), float64(maxX), float64(maxY)), true
 }
 
 func (stash *FontStash) TextIter(x, y float32, str string) *TextIterator {
@@ -331,10 +332,10 @@ func (stash *FontStash) TextIterForRunes(x, y float32, runes []rune) *TextIterat
 	if (state.align & ALIGN_LEFT) != 0 {
 		// do nothing
 	} else if (state.align & ALIGN_RIGHT) != 0 {
-		width, _ := stash.TextBoundsOfRunes(x, y, runes)
+		width, _, _ := stash.TextBoundsOfRunes(x, y, runes)
 		x -= width
 	} else if (state.align & ALIGN_CENTER) != 0 {
-		width, _ := stash.TextBoundsOfRunes(x, y, runes)
+		width, _, _ := stash.TextBoundsOfRunes(x, y, runes)
 		x -= width * 0.5
 	}
 	y += stash.getVerticalAlign(font, state.align, state.size*10.0)
