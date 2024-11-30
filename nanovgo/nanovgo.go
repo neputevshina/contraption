@@ -760,7 +760,7 @@ func (c *Context) Stroke() {
 	}
 	c.beginPath = false
 	state := c.getState()
-	scale := state.xform.getAverageScale()
+	scale := state.xform.GetAverageScale()
 	strokeWidth := clampF(state.strokeWidth*scale, 0.0, 200.0)
 	strokePaint := state.stroke
 
@@ -888,13 +888,13 @@ func (c *Context) FontFace() string {
 	return c.fs.GetFontName()
 }
 
-// Text draws text string at specified location. If end is specified only the sub-string up to the end is drawn.
-func (c *Context) Text(x, y float32, str string) float32 {
-	return c.TextRune(x, y, []rune(str))
-}
+// // Text draws text string at specified location. If end is specified only the sub-string up to the end is drawn.
+// func (c *Context) Text(x, y float32, str string) float32 {
+// 	return c.TextRune(x, y, []rune(str))
+// }
 
 // TextRune is an alternate version of Text that accepts rune slice.
-func (c *Context) TextRune(x, y float32, runes []rune) float32 {
+func (c *Context) TextRune(fs *fontstashmini.FontStash, x, y float32, runes []rune) float32 {
 	state := c.getState()
 	scale := state.getFontScale() * c.devicePxRatio
 	invScale := 1.0 / scale
@@ -902,6 +902,7 @@ func (c *Context) TextRune(x, y float32, runes []rune) float32 {
 		return 0
 	}
 
+	c.fs = fs
 	c.fs.SetSize(state.fontSize * scale)
 	c.fs.SetSpacing(state.letterSpacing * scale)
 	c.fs.SetBlur(state.fontBlur * scale)

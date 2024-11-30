@@ -16,7 +16,7 @@ type nvguop struct {
 
 	fontsiz float64
 	hfont   int
-	imagehd int
+	himage  int
 
 	lsp     float64
 	fblur   float64
@@ -112,7 +112,7 @@ func (c *Context) assertPathStarted() {
 
 func (c *Context) assertFrameStarted() {
 	if c.state != functag((*Context).BeginFrame) && c.state != 1 {
-		panic(`contraption.Context: BeginPath before BeginFrame`)
+		panic(`contraption.Context: caller was called before BeginFrame`)
 	}
 }
 
@@ -145,6 +145,7 @@ func (c *Context) BeginFrame(windowWidth, windowHeight int, devicePixelRatio flo
 		iargs: [10]int{windowWidth, windowHeight},
 		args:  [10]float64{devicePixelRatio},
 	})
+	c.devicePxRatio = devicePixelRatio
 	c.state = st
 }
 func (c *Context) EndFrame() {
@@ -167,12 +168,18 @@ func (c *Context) CreateImageRGBA(w, h int, imageFlags nanovgo.ImageFlags, data 
 		ImageFlags: imageFlags,
 		wh:         image.Pt(w, h),
 	})
+	_ = c.add((*Context).CreateImageRGBA, nvguop{
+		himage: len(c.Images),
+	})
 	return len(c.Images)
 }
 func (c *Context) CreateImageFromGoImage(imageFlag nanovgo.ImageFlags, img image.Image) int {
 	c.Images = append(c.Images, contextImage{
 		Image:      img,
 		ImageFlags: imageFlag,
+	})
+	_ = c.add((*Context).CreateImageFromGoImage, nvguop{
+		himage: len(c.Images),
 	})
 	return len(c.Images)
 }
@@ -508,13 +515,14 @@ const maxFontTextures = 4
 func (c *Context) TextRune(x, y float64, runes []rune) float64 {
 	c.assertFrameStarted()
 
-	scale := 1.0 // TODO Extract the diagonal from current transform.
+	scale := float64(min(c.CurrentTransform().GetAverageScale(), 4)) * c.devicePxRatio // TODO Extract the diagonal from current transform.
 	invScale := 1.0 / scale
-	if c.hfont == 0 {
+	if c.hfont < 0 {
 		return 0
 	}
 
 	c.fs.SetSize(float32(c.fontsiz * scale))
+	c.fs.SetAlign(fontstashmini.ALIGN_LEFT)
 	c.fs.SetSpacing(float32(c.lsp * scale))
 	c.fs.SetBlur(float32(c.fblur * scale))
 	c.fs.SetFont(c.hfont)
@@ -532,9 +540,7 @@ func (c *Context) TextRune(x, y float64, runes []rune) float64 {
 		if !ok {
 			break
 		}
-		// TODO Validate texture here
 		// TODO -1 means 'do kerning'
-		c.fs.ValidateTexture()
 		if iter.PrevGlyph.Index == -1 && c.hfont < maxFontTextures-1 {
 			iter = prevIter
 			quad, _ = iter.Next() // try again
@@ -548,13 +554,12 @@ func (c *Context) TextRune(x, y float64, runes []rune) float64 {
 		i++
 	}
 
-	st := c.add((*Context).TextRune, nvguop{
+	_ = c.add((*Context).TextRune, nvguop{
 		left:  left,
 		right: right,
 		runes: runes,
-		args:  [10]float64{invScale},
+		args:  [10]float64{invScale, x, y},
 	})
-	c.state = st
 
 	return float64(iter.X)
 }

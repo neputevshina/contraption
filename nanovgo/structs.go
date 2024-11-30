@@ -97,7 +97,7 @@ func (s *nvgState) reset() {
 }
 
 func (s *nvgState) getFontScale() float32 {
-	return minF(quantize(s.xform.getAverageScale(), 0.01), 4.0)
+	return minF(quantize(s.xform.GetAverageScale(), 0.01), 4.0)
 }
 
 type nvgPathCache struct {

@@ -101,7 +101,7 @@ func (t TransformMatrix) ToMat3x4() []float32 {
 	}
 }
 
-func (t TransformMatrix) getAverageScale() float32 {
+func (t TransformMatrix) GetAverageScale() float32 {
 	sx := math.Sqrt(float64(t[0]*t[0] + t[2]*t[2]))
 	sy := math.Sqrt(float64(t[1]*t[1] + t[3]*t[3]))
 	return float32((sx + sy) * 0.5)

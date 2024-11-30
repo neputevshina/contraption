@@ -275,11 +275,12 @@ func runcontext(concrete any, c *Context) {
 		case functag((*Context).CreateImage):
 			panic(`unimplemented`)
 		case functag((*Context).CreateImageFromGoImage):
-			panic(`unimplemented`)
+			m := c.Images[l.himage-1]
+			vgo.CreateImageFromGoImage(m.ImageFlags, m.Image)
 		case functag((*Context).CreateImageFromMemory):
 			panic(`unimplemented`)
 		case functag((*Context).CreateImageRGBA):
-			m := c.Images[l.imagehd]
+			m := c.Images[l.himage-1]
 			vgo.CreateImageRGBA(m.wh.X, m.wh.Y, m.ImageFlags, m.data)
 		case functag((*Context).CurrentTransform):
 			panic(`getter, unreachable`)
@@ -414,6 +415,8 @@ func runcontext(concrete any, c *Context) {
 		case functag((*Context).TextMetrics):
 			panic(`getter, unreachable`)
 		case functag((*Context).TextRune):
+			// vgo.TextRune(c.fs, float32(l.args[1]), float32(l.args[2]), l.runes)
+
 			sus := c.SpriteUnits[l.left:l.right]
 
 			vtxb = vtxb[:0]
@@ -450,8 +453,8 @@ func runcontext(concrete any, c *Context) {
 		case functag((*Context).Translate):
 			vgo.Translate(float32(l.args[0]), float32(l.args[1]))
 		case functag((*Context).UpdateImage):
-			f := c.Images[l.imagehd]
-			vgo.UpdateImage(l.imagehd, f.data)
+			f := c.Images[l.himage]
+			vgo.UpdateImage(l.himage, f.data)
 		default:
 			panic(`unreachable`)
 		}
