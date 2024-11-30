@@ -226,8 +226,8 @@ func (c *glContext) convertPaint(frag *glFragUniforms, paint *Paint, scissor *nv
 	frag.setStrokeMult((width*0.5 + fringe*0.5) / fringe)
 	frag.setStrokeThr(strokeThr)
 
-	if paint.image != 0 {
-		tex := c.findTexture(paint.image)
+	if paint.Image != 0 {
+		tex := c.findTexture(paint.Image)
 		if tex == nil {
 			return errors.New("invalid texture in GLParams.convertPaint")
 		}
@@ -620,7 +620,7 @@ func (p *glParams) renderFill(paint *Paint, scissor *nvgScissor, fringe float32,
 	var glPaths []glPath
 	c.calls = append(c.calls, glCall{
 		pathCount: len(paths),
-		image:     paint.image,
+		image:     paint.Image,
 	})
 	call := &c.calls[len(c.calls)-1]
 	glPaths, call.pathOffset = c.allocPath(call.pathCount)
@@ -740,7 +740,7 @@ func (p *glParams) renderStroke(paint *Paint, scissor *nvgScissor, fringe float3
 	call.callType = glnvgSTROKE
 	glPaths, call.pathOffset = c.allocPath(len(paths))
 	call.pathCount = len(paths)
-	call.image = paint.image
+	call.image = paint.Image
 
 	// Allocate vertices for all the paths
 	vertexOffset := c.allocVertexMemory(maxVertexCount(paths))
@@ -795,7 +795,7 @@ func (p *glParams) renderTriangles(paint *Paint, scissor *nvgScissor, vertexes [
 
 	c.calls = append(c.calls, glCall{
 		callType:       glnvgTRIANGLES,
-		image:          paint.image,
+		image:          paint.Image,
 		triangleOffset: vertexOffset / 4,
 		triangleCount:  vertexCount,
 	})
@@ -828,7 +828,7 @@ func (p *glParams) renderTriangleStrip(paint *Paint, scissor *nvgScissor, vertex
 
 	c.calls = append(c.calls, glCall{
 		callType:       glnvgTRIANGLESTRIP,
-		image:          paint.image,
+		image:          paint.Image,
 		triangleOffset: vertexOffset / 4,
 		triangleCount:  vertexCount,
 	})

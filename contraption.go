@@ -3,8 +3,16 @@
 // A good user interface framework must be an engine for a word processing game.
 //
 // TODO:
-// 	- Quadtree for pool
-//		- Needed for not redrawing the whole screen every time
+//	- Optimized paint
+//		- Two-pass Z-buffered drawing
+//			- Eliminate overdraw
+//			- First pass: opaque top-down, second pass: translucent bottom-up
+//		- Merging
+//			- Merge all text that was not overlayed above itself into one call
+//			- Merge all not overlayed shapes with the same fill into one call
+//			- Merge all not overlayed colors and (if possible) gradients into one call
+//	 	- Quadtree for pool
+//			- Needed for not redrawing the whole screen every time
 //	- Wall for errors.
 //	- Combine all pools into one struct so later nested crops/sequences can be implemented more easily.
 //	- Animations

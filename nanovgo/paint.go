@@ -13,7 +13,7 @@ type Paint struct {
 	feather    float32
 	innerColor Color
 	outerColor Color
-	image      int
+	Image      int
 }
 
 func (p *Paint) setPaintColor(color Color) {
@@ -24,7 +24,7 @@ func (p *Paint) setPaintColor(color Color) {
 	p.feather = 1.0
 	p.innerColor = color
 	p.outerColor = color
-	p.image = 0
+	p.Image = 0
 }
 
 // LinearGradient creates and returns a linear gradient. Parameters (sx,sy)-(ex,ey) specify the start and end coordinates
@@ -97,7 +97,7 @@ func ImagePattern(cx, cy, w, h, angle float32, img int, alpha float32) Paint {
 	return Paint{
 		xform:      xform,
 		extent:     [2]float32{w, h},
-		image:      img,
+		Image:      img,
 		innerColor: color,
 		outerColor: color,
 	}

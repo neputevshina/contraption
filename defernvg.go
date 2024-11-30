@@ -40,6 +40,7 @@ type nvguop struct {
 
 type contextImage struct {
 	deleted bool
+	h       int
 
 	image.Image
 	data []byte
@@ -48,7 +49,8 @@ type contextImage struct {
 }
 
 type contextFont struct {
-	deleted bool
+	deleted  bool
+	hbackend int
 
 	data     []byte
 	freeData byte
@@ -66,7 +68,8 @@ type Context struct {
 func newContext() *Context {
 	return &Context{
 		publicContext: publicContext{
-			fs: fontstashmini.New(512, 512),
+			fs:     fontstashmini.New(512, 512),
+			Images: []contextImage{{}},
 		},
 	}
 }
@@ -179,21 +182,21 @@ func (c *Context) CreateImageFromGoImage(imageFlag nanovgo.ImageFlags, img image
 		ImageFlags: imageFlag,
 	})
 	_ = c.add((*Context).CreateImageFromGoImage, nvguop{
-		himage: len(c.Images),
+		himage: len(c.Images) - 1,
 	})
-	return len(c.Images)
+	return len(c.Images) - 1
 }
 func (c *Context) UpdateImage(img int, data []byte) error {
 	panic(`unimplemented`)
 }
 func (c *Context) DeleteImage(img int) {
-	if img < 1 {
+	if img < 0 {
 		panic(`contraption.Context: incorrect image handle`)
 	}
-	if c.Images[img-1].deleted {
+	if c.Images[img].deleted {
 		panic(`contraption.Context: double image delete`)
 	}
-	c.Images[img-1] = contextImage{deleted: true}
+	c.Images[img] = contextImage{deleted: true}
 }
 func (c *Context) ImageSize(img int) (int, int, error) {
 	panic(`unimplemented`)

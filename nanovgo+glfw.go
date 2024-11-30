@@ -270,18 +270,18 @@ func runcontext(concrete any, c *Context) {
 		case functag((*Context).CreateFont):
 			panic(`unimplemented`)
 		case functag((*Context).CreateFontFromMemory):
-			f := c.Fonts[l.hfont]
-			vgo.CreateFontFromMemory("", f.data, f.freeData)
+			f := &c.Fonts[l.hfont]
+			f.hbackend = vgo.CreateFontFromMemory("", f.data, f.freeData)
 		case functag((*Context).CreateImage):
 			panic(`unimplemented`)
 		case functag((*Context).CreateImageFromGoImage):
-			m := c.Images[l.himage-1]
-			vgo.CreateImageFromGoImage(m.ImageFlags, m.Image)
+			m := &c.Images[l.himage]
+			m.h = vgo.CreateImageFromGoImage(m.ImageFlags, m.Image)
 		case functag((*Context).CreateImageFromMemory):
 			panic(`unimplemented`)
 		case functag((*Context).CreateImageRGBA):
-			m := c.Images[l.himage-1]
-			vgo.CreateImageRGBA(m.wh.X, m.wh.Y, m.ImageFlags, m.data)
+			m := &c.Images[l.himage]
+			m.h = vgo.CreateImageRGBA(m.wh.X, m.wh.Y, m.ImageFlags, m.data)
 		case functag((*Context).CurrentTransform):
 			panic(`getter, unreachable`)
 		case functag((*Context).DebugDumpPathCache):
@@ -289,7 +289,7 @@ func runcontext(concrete any, c *Context) {
 		case functag((*Context).Delete):
 			vgo.Delete()
 		case functag((*Context).DeleteImage):
-			vgo.DeleteImage(l.hfont)
+			vgo.DeleteImage(c.Images[l.himage].h)
 		case functag((*Context).Ellipse):
 			vgo.Ellipse(float32(l.args[0]), float32(l.args[1]), float32(l.args[2]), float32(l.args[3]))
 		case functag((*Context).EndFrame):
@@ -349,7 +349,9 @@ func runcontext(concrete any, c *Context) {
 		case functag((*Context).SetFillColor):
 			vgo.SetFillColor(l.fillc)
 		case functag((*Context).SetFillPaint):
-			vgo.SetFillPaint(l.fillp)
+			p := l.fillp
+			p.Image = c.Images[p.Image].h
+			vgo.SetFillPaint(p)
 		case functag((*Context).SetFontBlur):
 			vgo.SetFontBlur(float32(l.args[0]))
 		case functag((*Context).SetFontFace):
@@ -369,7 +371,9 @@ func runcontext(concrete any, c *Context) {
 		case functag((*Context).SetStrokeColor):
 			vgo.SetStrokeColor(l.strokec)
 		case functag((*Context).SetStrokePaint):
-			vgo.SetStrokePaint(l.strokep)
+			p := l.strokep
+			p.Image = c.Images[p.Image].h
+			vgo.SetStrokePaint(p)
 		case functag((*Context).SetStrokeWidth):
 			vgo.SetStrokeWidth(float32(l.args[0]))
 		case functag((*Context).SetTextAlign):
@@ -418,13 +422,14 @@ func runcontext(concrete any, c *Context) {
 			// vgo.TextRune(c.fs, float32(l.args[1]), float32(l.args[2]), l.runes)
 
 			sus := c.SpriteUnits[l.left:l.right]
+			bf := c.Fonts[l.hfont]
 
 			vtxb = vtxb[:0]
 			vtxb = append(vtxb, make([]nanovgo.Vertex, 4*len(sus))...)
 			vidx := 0
 			invScale := l.args[0]
 
-			_, ok := vgo.AllocTextAtlas(c.fs, l.hfont)
+			_, ok := vgo.AllocTextAtlas(c.fs, bf.hbackend)
 			if !ok {
 				panic(``)
 			}
@@ -447,7 +452,7 @@ func runcontext(concrete any, c *Context) {
 				vtxb[vidx+3] = vtx(c6, c7, quad.Tc.Min.X, quad.Tc.Max.Y)
 				vidx += 4
 			}
-			vgo.FlushTextTexture(c.fs, l.hfont)
+			vgo.FlushTextTexture(c.fs, bf.hbackend)
 			vgo.RenderText(vtxb)
 
 		case functag((*Context).Translate):

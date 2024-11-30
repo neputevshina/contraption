@@ -1570,7 +1570,7 @@ func (c *Context) RenderText(vertexes []Vertex) {
 	paint := state.fill
 
 	// Render triangles
-	paint.image = c.fontImages[c.fontImageIdx]
+	paint.Image = c.fontImages[c.fontImageIdx]
 
 	// Apply global alpha
 	paint.innerColor.A *= state.alpha
