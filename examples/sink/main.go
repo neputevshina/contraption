@@ -30,7 +30,7 @@ var barkov = strings.Split(string(_barkov), "\n")
 type Sorm = contraption.Sorm
 type World struct {
 	*contraption.World
-	Text func(size float64, str string) Sorm
+	Text func(size float64, str []rune) Sorm
 }
 
 var (
@@ -315,7 +315,7 @@ func (wo *World) Examples() Sorm {
 					wo.Sequence(contraption.SliceSequence(barkov, func(s string) contraption.Sorm {
 						return wo.Compound(
 							wo.Vfollow(),
-							wo.Text(8, s).Fill(hexpaint(`#000000`)),
+							wo.Text(8, []rune(s)).Fill(hexpaint(`#000000`)),
 							wo.Void(0, 8))
 					})))
 			}),
@@ -429,7 +429,7 @@ func (wo *World) Slider(v *float64) Sorm {
 
 func (wo *World) Label(v ...any) Sorm {
 	// TODO wo.Text takes io.RuneReader, define and use SprintRuneReader
-	return wo.Text(10, fmt.Sprint(v...)).Fill(hexpaint(`#000000`))
+	return wo.Text(10, []rune(fmt.Sprint(v...))).Fill(hexpaint(`#000000`))
 }
 
 func (wo *World) Example(label string, ex func() Sorm) Sorm {

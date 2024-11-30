@@ -3,6 +3,9 @@
 // A good user interface framework must be an engine for a word processing game.
 //
 // TODO:
+// 	- Quadtree for pool
+//		- Needed for not redrawing the whole screen every time
+//	- Wall for errors.
 //	- Combine all pools into one struct so later nested crops/sequences can be implemented more easily.
 //	- Animations
 //		- All animations are specified by deadline, no implicit duration
@@ -113,7 +116,6 @@
 //	+ Sequence must be a special shape that pastes Sorms inside a compound, not being compound itself
 //		- So wo.Text(io.RuneReader) could be Sequence
 //		+ Not clear how to reuse memory of pools in this case
-// 	- Quadtree for pool
 //	- Matching past in regexps and coords change [MAJOR TOPIC]
 //		- Easily solved with hitmaps — just draw a hitmap with all component's transformations
 //		- Could use per-event UV deltas, but 64x viewport memory overhead is too much
@@ -206,8 +208,8 @@ import (
 	"unsafe"
 
 	"github.com/go-gl/gl/v2.1/gl"
-	"github.com/neputevshina/geom"
 	"github.com/neputevshina/contraption/nanovgo"
+	"github.com/neputevshina/geom"
 	"golang.org/x/exp/slices"
 )
 
@@ -1224,9 +1226,9 @@ func (wo *World) prepass(_ *Sorm, c *Sorm, one bool) {
 			s := k
 			wo.Vgo.SetFontFaceID(s.fontid)
 			wo.Vgo.SetFontSize(k.Size.Y)
-			_, abcd := wo.Vgo.TextBounds(0, 0, s.key.(string))
-			_, space := wo.Vgo.TextBounds(0, 0, " ")
-			s.Size.X = float64(abcd[2]-abcd[0]) - float64(space[2]-space[0])
+			_, abcd := wo.Vgo.TextBounds(0, 0, s.key.([]rune))
+			_, space := wo.Vgo.TextBounds(0, 0, []rune{' '})
+			s.Size.X = abcd.Dx() - space.Dx()
 			if s.Size.X < 0 {
 				s.Size.X = 0
 			}
@@ -1711,10 +1713,10 @@ func (wo *World) recorder() {
 		vgo.SetFontFaceID(fid)
 		vgo.SetFillColor(hex(`#000000`))
 		vgo.SetFontSize(12 * wo.capmap[fid])
-		vgo.Text(16+8, 16+5, wo.Events.Trace[0].valuestring())
-		adv, _ := vgo.TextBounds(16+8, 16+5, wo.Events.Trace[0].valuestring())
+		vgo.TextRune(16+8, 16+5, []rune(wo.Events.Trace[0].valuestring()))
+		adv, _ := vgo.TextBounds(16+8, 16+5, []rune(wo.Events.Trace[0].valuestring()))
 		vgo.SetFillColor(hex(`#00000050`))
-		vgo.Text(16+8+adv+8, 16+5, wo.future.valuestring())
+		vgo.TextRune(16+8+adv+8, 16+5, []rune(wo.future.valuestring()))
 
 	case 3:
 		vgo.SetFillColor(hex(`#ff0000`))
@@ -1790,7 +1792,7 @@ func New(config Config) (wo *World) {
 	runtime.LockOSThread()
 
 	wo = &World{}
-	wo.Vgo = &Context{}
+	wo.Vgo = newContext()
 	concretenew(config, wo)
 
 	wo.hasher = fnv.New128a()

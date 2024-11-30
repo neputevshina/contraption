@@ -1,8 +1,8 @@
 package contraption
 
 import (
-	"github.com/neputevshina/geom"
 	"github.com/neputevshina/contraption/nanovgo"
+	"github.com/neputevshina/geom"
 )
 
 type Oscilloscope struct {
@@ -22,7 +22,8 @@ func (wo *World) displayOscilloscope() Sorm {
 					vgo.SetTextAlign(nanovgo.AlignLeft)
 					y := 0.0
 					for _, s := range collect(wo.Events.Trace, func(e EventPoint) string { return sprint(e.String()) }) {
-						vgo.Text(12, 14+y, s)
+						// TODO RuneReader
+						vgo.TextRune(12, 14+y, []rune(s))
 						y += 14
 					}
 				})).Cond(func(m Matcher) {

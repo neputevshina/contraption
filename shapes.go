@@ -6,8 +6,8 @@ import (
 	"math/rand"
 	"strconv"
 
-	"github.com/neputevshina/geom"
 	"github.com/neputevshina/contraption/nanovgo"
+	"github.com/neputevshina/geom"
 )
 
 func (s Sorm) paint(wo *World, f func()) {
@@ -37,19 +37,19 @@ func (s Sorm) paint(wo *World, f func()) {
 	}
 }
 
-func (wo *World) NewText(font []byte) func(size float64, str string) Sorm {
+func (wo *World) NewText(font []byte) func(size float64, str []rune) Sorm {
 	return wo.generalNewText(font, tagText)
 }
 
-func (wo *World) NewTopDownText(font []byte) func(size float64, str string) Sorm {
+func (wo *World) NewTopDownText(font []byte) func(size float64, str []rune) Sorm {
 	return wo.generalNewText(font, tagTopDownText)
 }
 
-func (wo *World) NewBottomUpText(font []byte) func(size float64, str string) Sorm {
+func (wo *World) NewBottomUpText(font []byte) func(size float64, str []rune) Sorm {
 	return wo.generalNewText(font, tagBottomUpText)
 }
 
-func (wo *World) generalNewText(font []byte, kind tagkind) func(size float64, str string) Sorm {
+func (wo *World) generalNewText(font []byte, kind tagkind) func(size float64, str []rune) Sorm {
 	name := strconv.FormatUint(rand.Uint64(), 36)
 	f, err := NewFont(wo.Vgo, font, name)
 	if err != nil {
@@ -60,7 +60,7 @@ func (wo *World) generalNewText(font []byte, kind tagkind) func(size float64, st
 	}
 	wo.nvgofontids = append(wo.nvgofontids, f.Vgoid)
 
-	return func(size float64, str string) Sorm {
+	return func(size float64, str []rune) Sorm {
 		s := wo.beginsorm()
 		s.tag = kind
 
@@ -109,7 +109,7 @@ func generaltextrun(kind tagkind) func(wo *World, s *Sorm) {
 		wo.Vgo.SetFontFaceID(s.fontid)
 		wo.Vgo.SetFillPaint(s.fill)
 		// println(s.key.(string), wo.vgo.CurrentTransform(), s.pos.X, s.pos.Y, s.Size.X, s.Size.Y)
-		wo.Vgo.Text(0, 0, s.key.(string))
+		wo.Vgo.TextRune(0, 0, s.key.([]rune))
 	}
 }
 

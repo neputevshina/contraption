@@ -5,6 +5,8 @@ import (
 	"reflect"
 
 	"github.com/neputevshina/contraption/nanovgo"
+	"github.com/neputevshina/contraption/nanovgo/fontstashmini"
+	"github.com/neputevshina/geom"
 )
 
 type nvguop struct {
@@ -13,9 +15,11 @@ type nvguop struct {
 	iargs [10]int
 
 	fontsiz float64
-	fonthd  int
+	hfont   int
 	imagehd int
 
+	lsp     float64
+	fblur   float64
 	strokep nanovgo.Paint
 	strokec nanovgo.Color
 	fillp   nanovgo.Paint
@@ -30,6 +34,8 @@ type nvguop struct {
 	nanovgo.GlyphPosition
 
 	runes []rune
+
+	left, right int
 }
 
 type contextImage struct {
@@ -57,17 +63,35 @@ type Context struct {
 	state uintptr
 }
 
+func newContext() *Context {
+	return &Context{
+		publicContext: publicContext{
+			fs: fontstashmini.New(512, 512),
+		},
+	}
+}
+
+type SpriteUnit struct {
+	Hfont int
+	Clip  geom.Rectangle
+	Tc    geom.Rectangle
+}
+
 // PublicContext is a draw list, publicly exposed for any (possibly custom) backend.
 //
 // TODO The only way to get PublicContext is to use the Process method on Context.
 // type PublicContext publicContext
 
 type publicContext struct {
-	nvguop
+	nvguop // Current state
 
-	Log    []nvguop
-	Images []contextImage
-	Fonts  []contextFont
+	fs *fontstashmini.FontStash
+
+	Log           []nvguop
+	Images        []contextImage
+	Fonts         []contextFont
+	SpriteUnits   []SpriteUnit
+	devicePxRatio float64
 }
 
 func functag(f any) uintptr {
@@ -87,7 +111,7 @@ func (c *Context) assertPathStarted() {
 }
 
 func (c *Context) assertFrameStarted() {
-	if c.state != functag((*Context).BeginFrame) {
+	if c.state != functag((*Context).BeginFrame) && c.state != 1 {
 		panic(`contraption.Context: BeginPath before BeginFrame`)
 	}
 }
@@ -115,6 +139,8 @@ func (c *Context) BeginFrame(windowWidth, windowHeight int, devicePixelRatio flo
 	if c.state != 0 {
 		panic(`contraption.Context: BeginFrame can only be called at the start of a frame`)
 	}
+	c.SpriteUnits = c.SpriteUnits[:0]
+
 	st := c.add((*Context).BeginFrame, nvguop{
 		iargs: [10]int{windowWidth, windowHeight},
 		args:  [10]float64{devicePixelRatio},
@@ -122,6 +148,7 @@ func (c *Context) BeginFrame(windowWidth, windowHeight int, devicePixelRatio flo
 	c.state = st
 }
 func (c *Context) EndFrame() {
+	_ = c.add((*Context).EndFrame, nvguop{})
 	c.state = 0
 }
 func (c *Context) CancelFrame() {
@@ -180,7 +207,8 @@ func (c *Context) CreateFontFromMemory(name string, data []byte, freeData uint8)
 		data:     data,
 		freeData: freeData,
 	})
-	return len(c.Fonts)
+	c.fs.AddFontFromMemory(name, data, freeData)
+	return len(c.Fonts) - 1
 }
 
 /* Shapes */
@@ -203,9 +231,6 @@ func (c *Context) Ellipse(cx, cy, rx, ry float64) {
 		args: [10]float64{cx, cy, rx, ry},
 	})
 }
-func (c *Context) Text(x, y float64, str string) float64 {
-	panic(`unimplemented`)
-}
 func (c *Context) RoundedRect(x, y, w, h, r float64) {
 	c.assertPathStarted()
 	_ = c.add((*Context).RoundedRect, nvguop{
@@ -217,9 +242,9 @@ func (c *Context) RoundedRect(x, y, w, h, r float64) {
 
 func (c *Context) BeginPath() {
 	c.assertFrameStarted()
-	if c.state != functag((*Context).ClosePath) {
-		panic(`contraption.Context: can't BeginPath before ClosePath`)
-	}
+	// if c.state != functag((*Context).ClosePath) {
+	// 	panic(`contraption.Context: can't BeginPath before ClosePath`)
+	// }
 	st := c.add((*Context).BeginPath, nvguop{})
 	c.state = st
 }
@@ -321,7 +346,10 @@ func (c *Context) Scale(x, y float64) {
 	panic(`unimplemented`)
 }
 func (c *Context) Scissor(x, y, w, h float64) {
-	panic(`unimplemented`)
+	c.assertFrameStarted()
+	_ = c.add((*Context).Scissor, nvguop{
+		args: [10]float64{x, y, w, h},
+	})
 }
 func (c *Context) SkewX(angle float64) {
 	panic(`unimplemented`)
@@ -363,9 +391,9 @@ func (c *Context) SetFontFace(font string) {
 	panic(`unimplemented`)
 }
 func (c *Context) SetFontFaceID(font int) {
-	c.fonthd = font
+	c.hfont = font
 	_ = c.add((*Context).SetFontFaceID, nvguop{
-		fonthd: font,
+		hfont: font,
 	})
 }
 func (c *Context) SetFontSize(size float64) {
@@ -468,8 +496,136 @@ func (c *Context) CurrentTransform() nanovgo.TransformMatrix {
 
 /* Online text operations */
 
-func (c *Context) TextBounds(x, y float64, str string) (float64, []float64) {
+// func quantize(a, d float32) float32 {
+// 	return float32(int(a/d+0.5)) * d
+// }
+// func (s *Context) getFontScale() float32 {
+// 	return minF(quantize(s.xform.getAverageScale(), 0.01), 4.0)
+// }
+
+const maxFontTextures = 4
+
+func (c *Context) TextRune(x, y float64, runes []rune) float64 {
+	c.assertFrameStarted()
+
+	scale := 1.0 // TODO Extract the diagonal from current transform.
+	invScale := 1.0 / scale
+	if c.hfont == 0 {
+		return 0
+	}
+
+	c.fs.SetSize(float32(c.fontsiz * scale))
+	c.fs.SetSpacing(float32(c.lsp * scale))
+	c.fs.SetBlur(float32(c.fblur * scale))
+	c.fs.SetFont(c.hfont)
+
+	left := len(c.SpriteUnits)
+	right := left + max(2, len(runes)) // Not less than two quads.
+	c.SpriteUnits = append(c.SpriteUnits, make([]SpriteUnit, right-left)...)
+
+	iter := c.fs.TextIterForRunes(float32(x*scale), float32(y*scale), runes)
+	prevIter := iter
+
+	i := 0
+	for {
+		quad, ok := iter.Next()
+		if !ok {
+			break
+		}
+		// TODO Validate texture here
+		// TODO -1 means 'do kerning'
+		c.fs.ValidateTexture()
+		if iter.PrevGlyph.Index == -1 && c.hfont < maxFontTextures-1 {
+			iter = prevIter
+			quad, _ = iter.Next() // try again
+		}
+		prevIter = iter
+		c.SpriteUnits[left:right][i] = SpriteUnit{
+			Hfont: c.hfont,
+			Clip:  geom.Rect(float64(quad.X0), float64(quad.Y0), float64(quad.X1), float64(quad.Y1)),
+			Tc:    geom.Rect(float64(quad.S0), float64(quad.T0), float64(quad.S1), float64(quad.T1)),
+		}
+		i++
+	}
+
+	st := c.add((*Context).TextRune, nvguop{
+		left:  left,
+		right: right,
+		runes: runes,
+		args:  [10]float64{invScale},
+	})
+	c.state = st
+
+	return float64(iter.X)
+}
+
+//	for {
+//		quad, ok := iter.Next()
+//		if !ok {
+//			break
+//		}
+//		if iter.PrevGlyph == nil || iter.PrevGlyph.Index == -1 {
+//			if !c.allocTextAtlas() {
+//				break // no memory :(
+//			}
+//			if index != 0 {
+//				c.renderText(vertexes[:index])
+//				index = 0
+//			}
+//			iter = prevIter
+//			quad, _ = iter.Next() // try again
+//			if iter.PrevGlyph == nil || iter.PrevGlyph.Index == -1 {
+//				// still can not find glyph?
+//				break
+//			}
+//		}
+//		prevIter = iter
+//		// Transform corners.
+//		c0, c1 := state.xform.TransformPoint(quad.X0*invScale, quad.Y0*invScale)
+//		c2, c3 := state.xform.TransformPoint(quad.X1*invScale, quad.Y0*invScale)
+//		c4, c5 := state.xform.TransformPoint(quad.X1*invScale, quad.Y1*invScale)
+//		c6, c7 := state.xform.TransformPoint(quad.X0*invScale, quad.Y1*invScale)
+//		//log.Printf("quad(%c) x0=%d, x1=%d, y0=%d, y1=%d, s0=%d, s1=%d, t0=%d, t1=%d\n", iter.CodePoint, int(quad.X0), int(quad.X1), int(quad.Y0), int(quad.Y1), int(1024*quad.S0), int(quad.S1*1024), int(quad.T0*1024), int(quad.T1*1024))
+//		// Create triangles
+//		if index+4 > vertexCount {
+//			panic(`index+4 > vertexCount, must be unreachable`)
+//		}
+//		(&vertexes[index]).set(c2, c3, quad.S1, quad.T0)
+//		(&vertexes[index+1]).set(c0, c1, quad.S0, quad.T0)
+//		(&vertexes[index+2]).set(c4, c5, quad.S1, quad.T1)
+//		(&vertexes[index+3]).set(c6, c7, quad.S0, quad.T1)
+//		index += 4
+//	}
+//
+// c.flushTextTexture()
+// c.renderText(vertexes[:index])
+
+func (c *Context) TextGlyphPositionsRune(x, y float64, runes []rune) []nanovgo.GlyphPosition {
 	panic(`unimplemented`)
+}
+func (c *Context) Text(x, y float64, str string) float64 {
+	panic(`unimplemented. use TextRune`)
+}
+
+func (c *Context) TextBounds(x, y float64, runes []rune) (float64, geom.Rectangle) {
+	scale := 1.0 // * c.devicePxRatio
+	invScale := 1.0 / scale
+	if c.hfont < 0 {
+		return 0, geom.Rectangle{}
+	}
+
+	c.fs.SetSize(float32(c.fontsiz * scale))
+	c.fs.SetSpacing(float32(c.lsp * scale))
+	c.fs.SetBlur(float32(c.fblur * scale))
+	c.fs.SetFont(c.hfont)
+
+	width, bounds := c.fs.TextBoundsOfRunes(float32(x*scale), float32(y*scale), runes)
+	// if bounds != (geom.Rectangle{}) {
+	bounds.Min.Y, bounds.Max.Y = c.fs.LineBounds(float32(y * scale))
+	bounds.Max = bounds.Max.Mul(invScale)
+	bounds.Min = bounds.Min.Mul(invScale)
+	// }
+	return float64(width) * invScale, bounds
 }
 func (c *Context) TextBox(x, y, breakRowWidth float64, str string) {
 	panic(`unimplemented`)
@@ -484,11 +640,5 @@ func (c *Context) TextBreakLinesRune(runes []rune, breakRowWidth float64) []nano
 	panic(`unimplemented`)
 }
 func (c *Context) TextGlyphPositions(x, y float64, str string) []nanovgo.GlyphPosition {
-	panic(`unimplemented`)
-}
-func (c *Context) TextGlyphPositionsRune(x, y float64, runes []rune) []nanovgo.GlyphPosition {
-	panic(`unimplemented`)
-}
-func (c *Context) TextRune(x, y float64, runes []rune) float64 {
 	panic(`unimplemented`)
 }

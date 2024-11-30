@@ -10,8 +10,8 @@ import (
 	"github.com/go-gl/gl/v2.1/gl"
 	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/h2non/filetype"
-	"github.com/neputevshina/geom"
 	"github.com/neputevshina/contraption/nanovgo"
+	"github.com/neputevshina/geom"
 )
 
 func concretenew(config Config, wo *World) {
@@ -62,6 +62,7 @@ func (wo *World) windowDevelop() {
 	wo.BeforeVgo = nil
 	wo.Vgo.EndFrame()
 	runcontext(wo.cctx, wo.Vgo)
+	wo.Vgo.Log = wo.Vgo.Log[:0] // TODO Retain and redraw if was not changed
 
 	if wo.Events.tempcur == 0 {
 		wo.Window.SwapBuffers()
@@ -242,6 +243,7 @@ func requals(p EventPoint, inst *rinst) bool {
 
 func runcontext(concrete any, c *Context) {
 	vgo := concrete.(*nanovgo.Context)
+	vtxb := []nanovgo.Vertex{}
 	for i := range c.Log {
 		l := &c.Log[i]
 		switch l.tag {
@@ -268,7 +270,7 @@ func runcontext(concrete any, c *Context) {
 		case functag((*Context).CreateFont):
 			panic(`unimplemented`)
 		case functag((*Context).CreateFontFromMemory):
-			f := c.Fonts[l.fonthd]
+			f := c.Fonts[l.hfont]
 			vgo.CreateFontFromMemory("", f.data, f.freeData)
 		case functag((*Context).CreateImage):
 			panic(`unimplemented`)
@@ -286,7 +288,7 @@ func runcontext(concrete any, c *Context) {
 		case functag((*Context).Delete):
 			vgo.Delete()
 		case functag((*Context).DeleteImage):
-			vgo.DeleteImage(l.fonthd)
+			vgo.DeleteImage(l.hfont)
 		case functag((*Context).Ellipse):
 			vgo.Ellipse(float32(l.args[0]), float32(l.args[1]), float32(l.args[2]), float32(l.args[3]))
 		case functag((*Context).EndFrame):
@@ -352,7 +354,7 @@ func runcontext(concrete any, c *Context) {
 		case functag((*Context).SetFontFace):
 			panic(`unimplemented`)
 		case functag((*Context).SetFontFaceID):
-			vgo.SetFontFaceID(l.fonthd)
+			vgo.SetFontFaceID(l.hfont)
 		case functag((*Context).SetFontSize):
 			vgo.SetFontSize(float32(l.args[0]))
 		case functag((*Context).SetGlobalAlpha):
@@ -412,7 +414,39 @@ func runcontext(concrete any, c *Context) {
 		case functag((*Context).TextMetrics):
 			panic(`getter, unreachable`)
 		case functag((*Context).TextRune):
-			vgo.TextRune(float32(l.args[0]), float32(l.args[1]), l.runes)
+			sus := c.SpriteUnits[l.left:l.right]
+
+			vtxb = vtxb[:0]
+			vtxb = append(vtxb, make([]nanovgo.Vertex, 4*len(sus))...)
+			vidx := 0
+			invScale := l.args[0]
+
+			for i := range sus {
+				quad := sus[i]
+				// Transform corners.
+				t := vgo.CurrentTransform()
+				c0, c1 := t.TransformPoint(float32(quad.Clip.Min.X*invScale), float32(quad.Clip.Min.Y*invScale))
+				c2, c3 := t.TransformPoint(float32(quad.Clip.Max.X*invScale), float32(quad.Clip.Min.Y*invScale))
+				c4, c5 := t.TransformPoint(float32(quad.Clip.Max.X*invScale), float32(quad.Clip.Max.Y*invScale))
+				c6, c7 := t.TransformPoint(float32(quad.Clip.Min.X*invScale), float32(quad.Clip.Max.Y*invScale))
+				//log.Printf("quad(%c) x0=%d, x1=%d, y0=%d, y1=%d, s0=%d, s1=%d, t0=%d, t1=%d\n", iter.CodePoint, int(quad.Clip.Min.X), int(quad.Clip.Max.X), int(quad.Clip.Min.Y), int(quad.Clip.Max.Y), int(1024*quad.Tc.Min.X), int(quad.Tc.Max.X*1024), int(quad.Tc.Min.Y*1024), int(quad.Tc.Max.Y*1024))
+				// Create triangles
+				vtx := func(x, y float32, u, v float64) nanovgo.Vertex {
+					return nanovgo.Vertex{X: float32(x), Y: float32(y), U: float32(u), V: float32(v)}
+				}
+				vtxb[vidx] = vtx(c2, c3, quad.Tc.Max.X, quad.Tc.Min.Y)
+				vtxb[vidx+1] = vtx(c0, c1, quad.Tc.Min.X, quad.Tc.Min.Y)
+				vtxb[vidx+2] = vtx(c4, c5, quad.Tc.Max.X, quad.Tc.Max.Y)
+				vtxb[vidx+3] = vtx(c6, c7, quad.Tc.Min.X, quad.Tc.Max.Y)
+				vidx += 4
+			}
+			_, ok := vgo.AllocTextAtlas(c.fs, l.hfont)
+			if !ok {
+				panic(``)
+			}
+			vgo.FlushTextTexture(c.fs, l.hfont)
+			vgo.RenderText(vtxb)
+
 		case functag((*Context).Translate):
 			vgo.Translate(float32(l.args[0]), float32(l.args[1]))
 		case functag((*Context).UpdateImage):
