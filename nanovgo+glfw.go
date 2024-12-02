@@ -3,6 +3,7 @@
 package contraption
 
 import (
+	"fmt"
 	"image"
 	"reflect"
 	"time"
@@ -60,13 +61,25 @@ func (wo *World) windowDevelop() {
 		wo.BeforeVgo()
 	}
 	wo.BeforeVgo = nil
-	wo.Vgo.EndFrame()
-	runcontext(wo.cctx, wo.Vgo)
-	wo.Vgo.Log = wo.Vgo.Log[:0] // TODO Retain and redraw if was not changed
-
+	oldhash := wo.Vgo.EndFrame()
+	c := wo.Vgo
 	if wo.Events.tempcur == 0 {
-		wo.Window.SwapBuffers()
+		oldhash = c.hash
+		c.hasher.Reset()
+		c.hasher.Write(c.meaningfulBytes)
+		c.hasher.Sum(c.hash[:0])
+		if oldhash != wo.Vgo.hash {
+			// println(oldhash, wo.Vgo.hash)
+			// Retain if was not changed
+			runcontext(wo.cctx, wo.Vgo)
+			wo.Window.SwapBuffers()
+		}
 	}
+	dt := time.Now().Sub(wo.Now)
+	println(`log length:`, len(wo.Vgo.Log), `looptime:`, dt, `dat:`, fmt.Sprintf("%f", float64(len(wo.Vgo.meaningfulBytes))/dt.Seconds()/1000000), `MB/s (`, len(wo.Vgo.meaningfulBytes), `)`)
+	c.meaningfulBytes = c.meaningfulBytes[:0]
+	wo.Vgo.Log = wo.Vgo.Log[:0]
+	// wo.Vgo.EndFrame()
 }
 
 type window = *glfw.Window
@@ -267,18 +280,12 @@ func runcontext(concrete any, c *Context) {
 			vgo.Circle(float32(l.args[0]), float32(l.args[1]), float32(l.args[2]))
 		case functag((*Context).ClosePath):
 			vgo.ClosePath()
-		case functag((*Context).CreateFont):
-			panic(`unimplemented`)
 		case functag((*Context).CreateFontFromMemory):
 			f := &c.Fonts[l.hfont]
 			f.hbackend = vgo.CreateFontFromMemory("", f.data, f.freeData)
-		case functag((*Context).CreateImage):
-			panic(`unimplemented`)
 		case functag((*Context).CreateImageFromGoImage):
 			m := &c.Images[l.himage]
 			m.h = vgo.CreateImageFromGoImage(m.ImageFlags, m.Image)
-		case functag((*Context).CreateImageFromMemory):
-			panic(`unimplemented`)
 		case functag((*Context).CreateImageRGBA):
 			m := &c.Images[l.himage]
 			m.h = vgo.CreateImageRGBA(m.wh.X, m.wh.Y, m.ImageFlags, m.data)
@@ -394,23 +401,9 @@ func runcontext(concrete any, c *Context) {
 			vgo.Stroke()
 		case functag((*Context).StrokeWidth):
 			vgo.StrokeWidth()
-		case functag((*Context).Text):
-			panic(`unimplemented`)
 		case functag((*Context).TextAlign):
 			panic(`getter, unreachable`)
 		case functag((*Context).TextBounds):
-			panic(`getter, unreachable`)
-		case functag((*Context).TextBox):
-			panic(`getter, unreachable`)
-		case functag((*Context).TextBoxBounds):
-			panic(`getter, unreachable`)
-		case functag((*Context).TextBreakLines):
-			panic(`getter, unreachable`)
-		case functag((*Context).TextBreakLinesRune):
-			panic(`getter, unreachable`)
-		case functag((*Context).TextGlyphPositions):
-			panic(`getter, unreachable`)
-		case functag((*Context).TextGlyphPositionsRune):
 			panic(`getter, unreachable`)
 		case functag((*Context).TextLetterSpacing):
 			panic(`getter, unreachable`)
@@ -429,9 +422,12 @@ func runcontext(concrete any, c *Context) {
 			vidx := 0
 			invScale := l.args[0]
 
-			_, ok := vgo.AllocTextAtlas(c.fs, bf.hbackend)
-			if !ok {
-				panic(``)
+			if l.args[3] == 1 {
+				// Reallocate atlas since we have new glyphs.
+				_, ok := vgo.AllocTextAtlas(c.fs, bf.hbackend)
+				if !ok {
+					panic(``)
+				}
 			}
 			for i := range sus {
 				quad := sus[i]

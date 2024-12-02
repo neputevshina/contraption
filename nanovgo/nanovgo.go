@@ -1524,16 +1524,16 @@ func (c *Context) flattenPaths() {
 }
 
 func (c *Context) FlushTextTexture(fs *fontstashmini.FontStash, hfont int) {
-	dirty, ok := fs.ValidateTexture()
-	if !ok {
+	r, dirty := fs.ValidateTexture()
+	if dirty {
 		fontImage := c.fontImages[hfont]
 		// Update texture
 		if fontImage != 0 {
 			data, _, _ := fs.GetTextureData()
-			x := dirty[0]
-			y := dirty[1]
-			w := dirty[2] - x
-			h := dirty[3] - y
+			x := r[0]
+			y := r[1]
+			w := r[2] - x
+			h := r[3] - y
 			c.params.renderUpdateTexture(fontImage, x, y, w, h, data)
 		}
 	}
@@ -1549,7 +1549,7 @@ func (c *Context) AllocTextAtlas(fs *fontstashmini.FontStash, hfont int) (newhfo
 	if c.fontImages[hfont] != 0 {
 		iw, ih, _ = c.ImageSize(c.fontImages[hfont])
 	} else { // calculate the new font image size and create it.
-		iw, ih, _ = c.ImageSize(c.fontImages[hfont])
+		iw, ih, _ = c.ImageSize(c.fontImages[hfont-1])
 		if iw > ih {
 			ih *= 2
 		} else {
@@ -1559,7 +1559,7 @@ func (c *Context) AllocTextAtlas(fs *fontstashmini.FontStash, hfont int) (newhfo
 			iw = nvgMaxFontImageSize
 			ih = nvgMaxFontImageSize
 		}
-		c.fontImages[hfont+1] = c.params.renderCreateTexture(nvgTextureALPHA, iw, ih, 0, nil)
+		c.fontImages[hfont-1] = c.params.renderCreateTexture(nvgTextureALPHA, iw, ih, 0, nil)
 	}
 	fs.ResetAtlas(iw, ih)
 	return hfont + 1, true

@@ -1,8 +1,11 @@
 package contraption
 
 import (
+	"crypto/sha1"
+	"hash"
 	"image"
 	"reflect"
+	"unicode/utf8"
 
 	"github.com/neputevshina/contraption/nanovgo"
 	"github.com/neputevshina/contraption/nanovgo/fontstashmini"
@@ -62,7 +65,10 @@ type contextFont struct {
 // TODO All transformations must be resolved by Context, not by the backend.
 type Context struct {
 	publicContext
-	state uintptr
+	state           uintptr
+	hash            [512]byte
+	hasher          hash.Hash
+	meaningfulBytes []byte
 }
 
 func newContext() *Context {
@@ -71,6 +77,7 @@ func newContext() *Context {
 			fs:     fontstashmini.New(512, 512),
 			Images: []contextImage{{}},
 		},
+		hasher: sha1.New(),
 	}
 }
 
@@ -95,16 +102,6 @@ type publicContext struct {
 	Fonts         []contextFont
 	SpriteUnits   []SpriteUnit
 	devicePxRatio float64
-}
-
-func functag(f any) uintptr {
-	return uintptr(reflect.ValueOf(f).UnsafePointer())
-}
-
-func (c *Context) add(f any, op nvguop) uintptr {
-	op.tag = functag(f)
-	c.Log = append(c.Log, op)
-	return op.tag
 }
 
 func (c *Context) assertPathStarted() {
@@ -136,6 +133,94 @@ func (c *Context) IntersectScissor(x, y, w, h float64) {
 	})
 }
 
+func functag(f any) uintptr {
+	return uintptr(reflect.ValueOf(f).UnsafePointer())
+}
+
+func (c *Context) add(f any, op nvguop) uintptr {
+	op.tag = functag(f)
+	c.Log = append(c.Log, op)
+	// TODO FNV-1a adds >2% of cpu usage, without any benefits
+	ap := func(bs []byte) {
+		c.meaningfulBytes = append(c.meaningfulBytes, bs...)
+	}
+	if op.runes != nil {
+		for _, r := range op.runes {
+			c.meaningfulBytes = utf8.AppendRune(c.meaningfulBytes, r)
+		}
+	}
+	ap(asbs(op.tag))
+	ap(asbs(op.args))
+	ap(asbs(op.iargs))
+	ap(asbs(op.fillc))
+	ap(asbs(op.fillp))
+	ap(asbs(op.strokec))
+	ap(asbs(op.strokep))
+	ap(asbs(op.fontsiz))
+	ap(asbs(op.hfont))
+	ap(asbs(op.himage))
+	return op.tag
+}
+
+type deferOp int
+
+const (
+	opBeginFrame deferOp = iota + 1
+	opEndFrame
+	opCancelFrame
+	opCreateImageRGBA
+	opCreateImageFromGoImage
+	opUpdateImage
+	opDeleteImage
+	opCreateFontFromMemory
+	opCircle
+	opRect
+	opEllipse
+	opRoundedRect
+	opBeginPath
+	opClosePath
+	opFill
+	opStroke
+	opAlso
+	opArc
+	opArcTo
+	opBezierTo
+	opLineTo
+	opMoveTo
+	opQuadTo
+	opPathWinding
+	opReset
+	opResetScissor
+	opResetTransform
+	opRestore
+	opSave
+	opRotate
+	opScale
+	opScissor
+	opSkewX
+	opSkewY
+	opSetTransform
+	opSetTransformByValue
+	opTranslate
+	opSetFillColor
+	opSetFillPaint
+	opSetFontBlur
+	opSetFontFace
+	opSetFontFaceID
+	opSetFontSize
+	opSetGlobalAlpha
+	opSetLineCap
+	opSetLineJoin
+	opSetMiterLimit
+	opSetStrokeColor
+	opSetStrokePaint
+	opSetStrokeWidth
+	opSetTextAlign
+	opSetTextLetterSpacing
+	opSetTextLineHeight
+	opTextRune
+)
+
 /* Frame and context state */
 
 func (c *Context) BeginFrame(windowWidth, windowHeight int, devicePixelRatio float64) {
@@ -151,9 +236,10 @@ func (c *Context) BeginFrame(windowWidth, windowHeight int, devicePixelRatio flo
 	c.devicePxRatio = devicePixelRatio
 	c.state = st
 }
-func (c *Context) EndFrame() {
+func (c *Context) EndFrame() (oldhash [512]byte) {
 	_ = c.add((*Context).EndFrame, nvguop{})
 	c.state = 0
+	return
 }
 func (c *Context) CancelFrame() {
 	panic(`unimplemented`)
@@ -201,17 +287,9 @@ func (c *Context) DeleteImage(img int) {
 func (c *Context) ImageSize(img int) (int, int, error) {
 	panic(`unimplemented`)
 }
-func (c *Context) CreateImage(filePath string, flags nanovgo.ImageFlags) int {
-	panic(`unimplemented`)
-}
-func (c *Context) CreateImageFromMemory(flags nanovgo.ImageFlags, data []byte) int {
-	panic(`unimplemented`)
-}
 
 /* Fonts */
-func (c *Context) CreateFont(name, filePath string) int {
-	panic(`unimplemented`)
-}
+
 func (c *Context) CreateFontFromMemory(name string, data []byte, freeData uint8) int {
 	c.Fonts = append(c.Fonts, contextFont{
 		data:     data,
@@ -506,13 +584,6 @@ func (c *Context) CurrentTransform() nanovgo.TransformMatrix {
 
 /* Online text operations */
 
-// func quantize(a, d float32) float32 {
-// 	return float32(int(a/d+0.5)) * d
-// }
-// func (s *Context) getFontScale() float32 {
-// 	return minF(quantize(s.xform.getAverageScale(), 0.01), 4.0)
-// }
-
 const maxFontTextures = 4
 
 func (c *Context) TextRune(x, y float64, runes []rune) float64 {
@@ -537,11 +608,15 @@ func (c *Context) TextRune(x, y float64, runes []rune) float64 {
 	iter := c.fs.TextIterForRunes(float32(x*scale), float32(y*scale), runes)
 	prevIter := iter
 
+	reallocateImage := false
 	i := 0
 	for {
 		quad, ok := iter.Next()
 		if !ok {
 			break
+		}
+		if iter.PrevGlyph == nil || iter.PrevGlyph.Index == -1 {
+			reallocateImage = true
 		}
 		// TODO -1 means 'do kerning'
 		if iter.PrevGlyph.Index == -1 && c.hfont < maxFontTextures-1 {
@@ -561,58 +636,10 @@ func (c *Context) TextRune(x, y float64, runes []rune) float64 {
 		left:  left,
 		right: right,
 		runes: runes,
-		args:  [10]float64{invScale, x, y},
+		args:  [10]float64{invScale, x, y, cond(reallocateImage, 1.0, 0)},
 	})
 
 	return float64(iter.X)
-}
-
-//	for {
-//		quad, ok := iter.Next()
-//		if !ok {
-//			break
-//		}
-//		if iter.PrevGlyph == nil || iter.PrevGlyph.Index == -1 {
-//			if !c.allocTextAtlas() {
-//				break // no memory :(
-//			}
-//			if index != 0 {
-//				c.renderText(vertexes[:index])
-//				index = 0
-//			}
-//			iter = prevIter
-//			quad, _ = iter.Next() // try again
-//			if iter.PrevGlyph == nil || iter.PrevGlyph.Index == -1 {
-//				// still can not find glyph?
-//				break
-//			}
-//		}
-//		prevIter = iter
-//		// Transform corners.
-//		c0, c1 := state.xform.TransformPoint(quad.X0*invScale, quad.Y0*invScale)
-//		c2, c3 := state.xform.TransformPoint(quad.X1*invScale, quad.Y0*invScale)
-//		c4, c5 := state.xform.TransformPoint(quad.X1*invScale, quad.Y1*invScale)
-//		c6, c7 := state.xform.TransformPoint(quad.X0*invScale, quad.Y1*invScale)
-//		//log.Printf("quad(%c) x0=%d, x1=%d, y0=%d, y1=%d, s0=%d, s1=%d, t0=%d, t1=%d\n", iter.CodePoint, int(quad.X0), int(quad.X1), int(quad.Y0), int(quad.Y1), int(1024*quad.S0), int(quad.S1*1024), int(quad.T0*1024), int(quad.T1*1024))
-//		// Create triangles
-//		if index+4 > vertexCount {
-//			panic(`index+4 > vertexCount, must be unreachable`)
-//		}
-//		(&vertexes[index]).set(c2, c3, quad.S1, quad.T0)
-//		(&vertexes[index+1]).set(c0, c1, quad.S0, quad.T0)
-//		(&vertexes[index+2]).set(c4, c5, quad.S1, quad.T1)
-//		(&vertexes[index+3]).set(c6, c7, quad.S0, quad.T1)
-//		index += 4
-//	}
-//
-// c.flushTextTexture()
-// c.renderText(vertexes[:index])
-
-func (c *Context) TextGlyphPositionsRune(x, y float64, runes []rune) []nanovgo.GlyphPosition {
-	panic(`unimplemented`)
-}
-func (c *Context) Text(x, y float64, str string) float64 {
-	panic(`unimplemented. use TextRune`)
 }
 
 func (c *Context) TextBounds(x, y float64, runes []rune) (float64, geom.Rectangle) {
@@ -634,19 +661,4 @@ func (c *Context) TextBounds(x, y float64, runes []rune) (float64, geom.Rectangl
 		bounds.Min = bounds.Min.Mul(invScale)
 	}
 	return float64(width) * invScale, bounds
-}
-func (c *Context) TextBox(x, y, breakRowWidth float64, str string) {
-	panic(`unimplemented`)
-}
-func (c *Context) TextBoxBounds(x, y, breakRowWidth float64, str string) [4]float64 {
-	panic(`unimplemented`)
-}
-func (c *Context) TextBreakLines(str string, breakRowWidth float64) []nanovgo.TextRow {
-	panic(`unimplemented`)
-}
-func (c *Context) TextBreakLinesRune(runes []rune, breakRowWidth float64) []nanovgo.TextRow {
-	panic(`unimplemented`)
-}
-func (c *Context) TextGlyphPositions(x, y float64, str string) []nanovgo.GlyphPosition {
-	panic(`unimplemented`)
 }

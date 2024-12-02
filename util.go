@@ -15,8 +15,8 @@ import (
 	"strconv"
 	"unsafe"
 
-	"github.com/neputevshina/geom"
 	"github.com/neputevshina/contraption/nanovgo"
+	"github.com/neputevshina/geom"
 	"golang.org/x/exp/constraints"
 	"golang.org/x/image/font/sfnt"
 	"golang.org/x/image/math/fixed"
@@ -448,5 +448,6 @@ func roundmodf(f float64) (float64, float64) {
 }
 
 func asbs[T any](v T) []byte {
-	return unsafe.Slice((*byte)(unsafe.Pointer(&v)), unsafe.Sizeof(v))
+	var z T
+	return unsafe.Slice((*byte)(unsafe.Pointer(&v)), unsafe.Sizeof(z))
 }

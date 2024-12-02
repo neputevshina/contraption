@@ -218,16 +218,16 @@ func (stash *FontStash) LineBounds(y float32) (minY, maxY float64) {
 	return
 }
 
-func (stash *FontStash) ValidateTexture() (dirty [4]int, ok bool) {
+func (stash *FontStash) ValidateTexture() (rect [4]int, dirty bool) {
 	if stash.dirtyRect[0] < stash.dirtyRect[2] && stash.dirtyRect[1] < stash.dirtyRect[3] {
-		copy(dirty[0:4], stash.dirtyRect[:])
+		copy(rect[0:4], stash.dirtyRect[:])
 		stash.dirtyRect[0] = stash.params.width
 		stash.dirtyRect[1] = stash.params.height
 		stash.dirtyRect[2] = 0
 		stash.dirtyRect[3] = 0
+		return rect, true
 	}
-	ok = false
-	return
+	return rect, false
 }
 
 func (stash *FontStash) GetTextureData() ([]byte, int, int) {

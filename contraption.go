@@ -429,6 +429,7 @@ type World struct {
 
 	hasher  hash.Hash // Current tree hash
 	oldhash [16]byte  // Previous tree hash
+
 }
 
 type imagestruct struct {
@@ -663,18 +664,18 @@ func (wo *World) beginsorm() (s Sorm) {
 }
 
 func (wo *World) endsorm(s Sorm) {
-	wr := wo.hasher.Write
+	// wr := wo.hasher.Write
 	// Note that at the moment endsorm() is called it is creating the tree description.
 	// So every value here is not processed in any way.
 	// Even CondFill/Stroke is not called yet.
-	wr(asbs(s.z))
-	wr(asbs(s.Size))
-	wr(asbs(s.add))
-	wr(asbs(s.fill))
-	wr(asbs(s.stroke))
-	wr(asbs(s.tag))
-	wr(asbs(s.fontid))
-	wr(asbs(s.r))
+	// wr(asbs(s.z))
+	// wr(asbs(s.Size))
+	// wr(asbs(s.add))
+	// wr(asbs(s.fill))
+	// wr(asbs(s.stroke))
+	// wr(asbs(s.tag))
+	// wr(asbs(s.fontid))
+	// wr(asbs(s.r))
 }
 
 func (wo *World) allowed(s *Sorm) bool {
@@ -938,7 +939,7 @@ out:
 				var buf [32]Sorm
 			out2:
 				for i := 0; i < q.Length(wo); i += len(buf) {
-					println(i, len(buf), i+len(buf), q.Length(wo))
+					// println(i, len(buf), i+len(buf), q.Length(wo))
 					n := q.Get(wo, i, buf[:])
 					for j := 0; j < min(n, len(buf)); j++ {
 						f(&buf[j])                               // (1)
@@ -1375,10 +1376,11 @@ func (wo *World) Develop() {
 	auxpool := wo.auxpool
 
 	// Don't relayout if tree is the same.
-	var chash [16]byte
-	wo.hasher.Sum((&chash)[:0])
-	skiplayout := chash == wo.oldhash
-	wo.oldhash = chash
+	// var chash [16]byte
+	// wo.hasher.Sum((&chash)[:0])
+	// skiplayout := chash == wo.oldhash
+	// wo.oldhash = chash
+	skiplayout := false
 	if skiplayout {
 		// Pre-swap old and current, so we are drawing from the old pool.
 		pool = wo.old
@@ -1781,7 +1783,6 @@ type Config struct {
 }
 
 type Window struct {
-	FPS int
 	window
 }
 

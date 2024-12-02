@@ -131,8 +131,8 @@ func (u *Events) trueemit(ev interface{}, pt geom.Point, t time.Time) {
 		u.records = append(u.records, m)
 	}
 
-	// Push paint deadline further.
-	u.SetDeadline(t.Add(100 * time.Millisecond))
+	// // Push paint deadline further.
+	// u.SetDeadline(t.Add(100 * time.Millisecond))
 
 	// If the just happened event is the same type and value as the latest event in Trace,
 	// the latter is pushed to Details and replaced with former.
