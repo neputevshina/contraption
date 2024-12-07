@@ -109,6 +109,8 @@ func (wo *Events) next() bool {
 
 func (u *Events) emit(ev interface{}, pt geom.Point, t time.Time) {
 	m := EventPoint{ev, pt, t, 0, 0}
+	// Skip events if application is lagging.
+	u.tempcur = min(len(u.temp)-1, u.tempcur)
 	u.temp[u.tempcur] = m
 	u.tempcur++
 }
