@@ -2,9 +2,9 @@
 A real-time programmable vector graphics editor and GUI framework.
 
 ## Motivation
-Go does not have a sane UI framework, and I need one for my heroic _endeavor_. Gio is incomprehensible. It is good from rendering technology point of view, but its interface is simply shit. You can't write a GUI application with it without an unlimited amount of time.
+Go does not have a sane UI framework, and I need one for my heroic _endeavor_. Gio is [incomprehensible](https://gioui.org/doc/learn/get-started#creating-the-program). It is good from rendering technology point of view (soon I will use it as a browser backend), but its program interface is simply shit. You can't do a serious GUI application with it without an unlimited amount of time and sanity.
 
-So I simply want a GUI framework that is [Apparatus](https://aprt.us) in form of code.
+So I simply want a GUI framework that is [Apparatus](https://aprt.us) in form of code. Also it must be fast and run in browser.
 
 ## Intro
 See examples/sink/main.go
@@ -92,5 +92,18 @@ if wo.Events.Match(`Press(I) !Release(Ctrl)* !Release(Shift)* Press(Shift) !Rele
 See also the comment at the beginning of `contraption.go`.
 
 # Acknowledgements
+
+The research was stolen from [tonsky](https://github.com/tonsky) from his articles about [his GUI framework](https://github.com/HumbleUI/HumbleUI)
+- https://tonsky.me/blog/clojure-ui/
+- https://tonsky.me/blog/humble-decomposition/
+- https://tonsky.me/blog/humble-layout/
+- https://tonsky.me/blog/humble-dx/
+- https://tonsky.me/blog/humble-state/
+- https://tonsky.me/blog/humble-signals/
+- https://tonsky.me/blog/humble-vdom/
+- https://tonsky.me/blog/humble-objects/
+- https://tonsky.me/blog/humble-defcomp/
+
+The idea of regexps for event maching is stolen from [Proton multitouch framework](http://vis.berkeley.edu/papers/proton/) and everything else.
 
 Данный проект разрабатывался как часть реализации гранта УМНИК [Фонда Содействия Инновациям](https://fasie.ru/programs/programma-umnik/). Номер договора 18384ГУ/2023.
