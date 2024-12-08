@@ -4,7 +4,7 @@ A real-time programmable vector graphics editor and GUI framework.
 ## Motivation
 Go does not have a sane UI framework, and I need one for my heroic _endeavor_. Gio is incomprehensible. It is good from rendering technology point of view, but its interface is simply shit. You can't write a GUI application with it without an unlimited amount of time.
 
-So I simply want a GUI framework that is (Apparatus)[https://aprt.us] in form of code.
+So I simply want a GUI framework that is [Apparatus](https://aprt.us) in form of code.
 
 ## Intro
 See examples/sink/main.go
@@ -21,14 +21,14 @@ There are also modifiers that change the geometry of kids (`Halign`, `Valign`), 
 
 Shapes are exactly what you think of them. Currently there is not so many, and the Text will be replaced by Sequence-like element. 
 
-**Sequences.** You can implement the `contraption.Sequence` interface to generate components from other sources. Currently it will get **every element from the Sequence to generate the tree**. Receiving only elements that could be drawn is in the nearest plans.
+**Sequences.** You can implement the `contraption.Sequence` interface to generate components from other sources. Currently it will get the **every element from the Sequence to generate the tree**. Receiving only elements that could be drawn is in the nearest plans.
 
 **Contraption uses the function call mechanics for topological sorting of components to minimize copying. This means that sometimes you should use closures to place component correctly in a tree. If you not do this you will get an incorrect layout.** Will be obsolete in the next few weeks because I will return the pointer. Copying is simply too expensive, according to profiling.
 
 Anything that could be placed inside a compound has the type **Sorm**. Anything in the package `contraption` that returns a Sorm must be considered an **element** of Contraption.
 
 ## Layout model
-Think (Subform Layout)[https://subformapp.com/articles/why-not-flexbox/], but 100x dumber and there are actually no main and auxiliary axes exposed to user (at least for now).
+Think [Subform Layout](https://subformapp.com/articles/why-not-flexbox/), but 100x dumber and there are actually no main and auxiliary axes exposed to user (at least for now).
 
 Positive size values are work as pixels scaled by the applied transform. The `s` unit from Subform is the negative unit (-1, -2, -3 etc) in Contraption. Negative units are distributed between all kids _recursively_, meaning that in
 ```
