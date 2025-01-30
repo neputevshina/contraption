@@ -106,4 +106,4 @@ The research was stolen from [tonsky](https://github.com/tonsky) from his articl
 
 The idea of regexps for event maching is stolen from [Proton multitouch framework](http://vis.berkeley.edu/papers/proton/) and any other paper on using state machines in UI to match the user input.
 
-Данный проект разрабатывался как часть реализации гранта УМНИК [Фонда Содействия Инновациям](https://fasie.ru/programs/programma-umnik/). Номер договора 18384ГУ/2023.
+Contraption was initially developed as the part of a larger project funded by [Foundation for Assistance to Small Innovative Enterprises UMNIK grant](https://fasie.ru/programs/programma-umnik/) № 18384ГУ/2023.
