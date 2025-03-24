@@ -148,6 +148,8 @@
 //			- Can be used to implement grid layout.
 //			- Other proposed names: Hequalize, Vequalize
 //			- H2Vfollow, V2Hfollow — stretch as one, lay out as another
+//		- Knob without Canvas
+//			- Requires CAD-like features.
 //	- Subworlds — layout inside canvases
 //	? Modifier to shape position independence
 //	? Fix paint interface
@@ -389,8 +391,7 @@ type World struct {
 	*Events
 	gen int
 
-	Window       Window
-	Oscilloscope Oscilloscope
+	Window Window
 
 	tmp []Sorm
 

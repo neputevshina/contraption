@@ -3,8 +3,9 @@ package main
 import (
 	"log"
 
-	"github.com/neputevshina/geom"
 	"github.com/neputevshina/contraption/nanovgo"
+	"github.com/neputevshina/geom"
+	"golang.org/x/exp/constraints"
 )
 
 func hex(s string) (c nanovgo.Color) {
@@ -44,4 +45,18 @@ func geom2nanovgo(g geom.Geom) nanovgo.TransformMatrix {
 		float32(g[1][0]), float32(g[1][1]),
 		float32(g[2][0]), float32(g[2][1]),
 	}
+}
+
+func max[T constraints.Ordered](a, b T) T {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func min[T constraints.Ordered](a, b T) T {
+	if a < b {
+		return a
+	}
+	return b
 }

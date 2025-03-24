@@ -1,0 +1,4 @@
+- `wo.Hgrid(rows int)`
+- `wo.Vgrid(cols int)`
+- Size of next rows or columns is determined by first row or column of a grid.
+- 

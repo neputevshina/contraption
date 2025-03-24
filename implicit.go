@@ -4,7 +4,6 @@ import (
 	"math"
 
 	"github.com/neputevshina/geom"
-	"github.com/neputevshina/contraption/nanovgo"
 	"golang.org/x/exp/slices"
 )
 
@@ -50,7 +49,7 @@ type impLine struct {
 }
 
 // todo? https://github.com/prideout/par/blob/master/par_msquares.h
-func impMarch(vg *nanovgo.Context, eqn Eqn, w, h float64) (points []geom.Point) {
+func impMarch(vg *Context, eqn Eqn, w, h float64) (points []geom.Point) {
 	sign := math.Signbit
 	const N = 22.0
 	var _lines [N * N]impLine

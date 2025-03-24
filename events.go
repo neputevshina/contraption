@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/h2non/filetype"
 	"github.com/neputevshina/geom"
 )
@@ -129,7 +128,7 @@ func nameevent(typ string, value string) any {
 	rechar := regexp.MustCompile("'.'")
 	renum := regexp.MustCompile("[-+]?(0|[1-9][0-9]*)")
 	intv := 0
-	var keyv glfw.Key
+	var keyv Key
 	var err error = &dummyerr{}
 
 	if value == "" {

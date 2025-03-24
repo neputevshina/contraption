@@ -1,4 +1,4 @@
-//go:build !gio
+//go:build nanovgo_glfw
 
 package contraption
 

@@ -193,6 +193,9 @@ func (u *Events) Anywhere() Matcher {
 	return m
 }
 
+//syntax:type contraption-regexp
+type Regexp string
+
 // Matcher is a builder interface for regular expressions.
 type Matcher struct {
 	u        *Events
@@ -252,53 +255,54 @@ func (m Matcher) Indef() Matcher {
 	return m
 }
 
-func (m Matcher) Match(pattern string) bool {
+func (m Matcher) Match(pattern Regexp) bool {
 	return m.u.match(pattern, m.rect, m.dur, m.deadline, m.z, m.alwaysin)
 }
 
-func (u *Events) Match(pattern string) bool {
+func (u *Events) Match(pattern Regexp) bool {
 	return u.match(pattern, geom.Rect(-99999, -99999, 99999, 99999), time.Duration(^uint64(0)>>1), u.Now, 0, false)
 }
 
 // Hint: :in. And add MatchAllIn later, for fuck's sake.
-func (u *Events) MatchIn(pattern string, r geom.Rectangle) bool {
+func (u *Events) MatchIn(pattern Regexp, r geom.Rectangle) bool {
 	return u.match(pattern, r, time.Duration(^uint64(0)>>1), u.Now, 0, false)
 }
 
-func (u *Events) MatchInNochoke(pattern string, r geom.Rectangle) bool {
+func (u *Events) MatchInNochoke(pattern Regexp, r geom.Rectangle) bool {
 	// TODO
 	return u.match(pattern, r, time.Duration(^uint64(0)>>1), u.Now, maxint, false)
 }
 
-func (u *Events) MatchIndef(pattern string) bool {
+func (u *Events) MatchIndef(pattern Regexp) bool {
 	return u.match(pattern, geom.Rect(-99999, -99999, 99999, 99999), time.Duration(^uint64(0)>>1), time.Time{}, 0, false)
 }
 
-func (u *Events) MatchInIndef(pattern string, rect geom.Rectangle) bool {
+func (u *Events) MatchInIndef(pattern Regexp, rect geom.Rectangle) bool {
 	return u.match(pattern, rect, time.Duration(^uint64(0)>>1), time.Time{}, 0, false)
 }
 
-func (u *Events) MatchInFreshness(pattern string, rect geom.Rectangle, freshness time.Duration) bool {
+func (u *Events) MatchInFreshness(pattern Regexp, rect geom.Rectangle, freshness time.Duration) bool {
 	return u.match(pattern, rect, time.Duration(^uint64(0)>>1), u.Now.Add(-freshness), 0, false)
 }
 
-func (u *Events) MatchInDuration(pattern string, rect geom.Rectangle, duration time.Duration) bool {
+func (u *Events) MatchInDuration(pattern Regexp, rect geom.Rectangle, duration time.Duration) bool {
 	return u.match(pattern, rect, duration, time.Time{}, 0, false)
 }
 
-func (u *Events) MatchFreshness(pattern string, freshness time.Duration) bool {
+func (u *Events) MatchFreshness(pattern Regexp, freshness time.Duration) bool {
 	return u.match(pattern, geom.Rect(-99999, -99999, 99999, 99999), time.Duration(^uint64(0)>>1), u.Now.Add(-freshness), 0, false)
 }
 
-func (u *Events) MatchDeadline(pattern string, deadline time.Time) bool {
+func (u *Events) MatchDeadline(pattern Regexp, deadline time.Time) bool {
 	return u.match(pattern, geom.Rect(-99999, -99999, 99999, 99999), time.Duration(^uint64(0)>>1), deadline, 0, false)
 }
 
-func (u *Events) MatchInDeadline(pattern string, rect geom.Rectangle, deadline time.Time) bool {
+func (u *Events) MatchInDeadline(pattern Regexp, rect geom.Rectangle, deadline time.Time) bool {
 	return u.match(pattern, rect, time.Duration(^uint64(0)>>1), deadline, 0, false)
 }
 
-func (u *Events) match(pattern string, rect geom.Rectangle, dur time.Duration, deadline time.Time, z int, alwaysin bool) bool {
+func (u *Events) match(p Regexp, rect geom.Rectangle, dur time.Duration, deadline time.Time, z int, alwaysin bool) bool {
+	pattern := string(p)
 	u.MatchCount++
 	r, ok := u.regexps[pattern]
 	if !ok {

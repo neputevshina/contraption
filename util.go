@@ -29,14 +29,14 @@ var (
 	testingBuffer sfnt.Buffer
 )
 
-func createFontFromMemory(vg *nanovgo.Context, name string, font []byte, capk float64) {
+func createFontFromMemory(vg *Context, name string, font []byte, capk float64) {
 	id := vg.CreateFontFromMemory(name, font, 0)
 	capmap[id] = capk
 }
 
-func setFontSize(vg *nanovgo.Context, size float64) {
+func setFontSize(vg *Context, size float64) {
 	id := vg.FontFaceID()
-	vg.SetFontSize(float32(size * capmap[id]))
+	vg.SetFontSize((size * capmap[id]))
 }
 
 func gray(v byte) (c nanovgo.Color) {
@@ -451,3 +451,8 @@ func asbs[T any](v T) []byte {
 	var z T
 	return unsafe.Slice((*byte)(unsafe.Pointer(&v)), unsafe.Sizeof(z))
 }
+
+type (
+	f32 = float32
+	f64 = float64
+)
