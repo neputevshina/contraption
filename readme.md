@@ -27,6 +27,8 @@ Shapes are exactly what you think they are. Currently there aren't many, and the
 
 Anything that could be placed inside a compound has the type **Sorm**. Anything in the package `contraption` that returns a Sorm must be considered an **element** of Contraption.
 
+![An image showing every possible shape or modifier in Contraption](./docs/Sorm%20map.svg)
+
 ## Layout model
 Think [Subform Layout](https://subformapp.com/articles/why-not-flexbox/), but 100x dumber and there are actually no main and auxiliary axes are exposed to user (at least for now).
 
@@ -107,3 +109,8 @@ The research was stolen from [tonsky](https://github.com/tonsky) from his articl
 The idea of regexps for event maching is stolen from [Proton multitouch framework](http://vis.berkeley.edu/papers/proton/) and any other paper on using state machines in UI to match the user input.
 
 Contraption was initially developed as the part of a larger project funded by [Foundation for Assistance to Small Innovative Enterprises UMNIK grant](https://fasie.ru/programs/programma-umnik/) № 18384ГУ/2023.
+
+---
+
+_A high-level description of the layout process I made to understand it more. I think it looks cool:_
+![Approximate layout algorithm](./docs/layoutprocess.excalidraw.svg)
