@@ -1,7 +1,6 @@
 package contraption
 
 import (
-	"fmt"
 	"image"
 	"reflect"
 	"time"
@@ -63,9 +62,8 @@ func (wo *World) windowDevelop() {
 	c := wo.Vgo
 	if wo.Events.tempcur == 0 {
 		oldhash = c.hash
-		c.hasher.Reset()
-		c.hasher.Write(c.meaningfulBytes)
 		c.hasher.Sum(c.hash[:0])
+		c.hasher.Reset()
 		if oldhash != wo.Vgo.hash {
 			// println(oldhash, wo.Vgo.hash)
 			// Retain if was not changed
@@ -73,9 +71,6 @@ func (wo *World) windowDevelop() {
 			wo.Window.SwapBuffers()
 		}
 	}
-	dt := time.Now().Sub(wo.Now)
-	println(`log length:`, len(wo.Vgo.Log), `looptime:`, dt, `dat:`, fmt.Sprintf("%f", float64(len(wo.Vgo.meaningfulBytes))/dt.Seconds()/1000000), `MB/s (`, len(wo.Vgo.meaningfulBytes), `)`)
-	c.meaningfulBytes = c.meaningfulBytes[:0]
 	wo.Vgo.Log = wo.Vgo.Log[:0]
 	// wo.Vgo.EndFrame()
 }
@@ -380,7 +375,7 @@ func runcontext(concrete any, c *Context) {
 			p.Image = c.Images[p.Image].h
 			vgo.SetStrokePaint(p)
 		case functag((*Context).SetStrokeWidth):
-			vgo.SetStrokeWidth(float32(l.args[0]))
+			vgo.SetStrokeWidth(float32(l.strokew))
 		case functag((*Context).SetTextAlign):
 			vgo.SetTextAlign(l.Align)
 		case functag((*Context).SetTextLetterSpacing):

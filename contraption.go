@@ -114,6 +114,7 @@
 //	- Display sinks on F2 view. Make F2 configurable also.
 //	- Stylus events
 //		- Touch(<50), Touch(>= 10) — threshold for pressure
+//		- Gesture detection (see PalmOS Graffiti system)
 //	- File drag event: Drag(*.txt)
 //		- A companion for Drop — matches when the file is dragged above the area.
 //		- Needs changes in GLFW or changing input library. SDL supports this.
@@ -1592,13 +1593,13 @@ skiplayout:
 
 	wo.recorder()
 
-	if wo.Events.Match(`!Release(Ctrl)* Press(Ctrl)`) {
-		if wo.Events.Match(`!Release(Shift)* Press(Shift)`) {
-			if wo.Events.Match(`Press(I)`) {
-				wo.Oscilloscope.on = !wo.Oscilloscope.on
-			}
-		}
-	}
+	// if wo.Events.Match(`!Release(Ctrl)* Press(Ctrl)`) {
+	// 	if wo.Events.Match(`!Release(Shift)* Press(Shift)`) {
+	// 		if wo.Events.Match(`Press(I)`) {
+	// 			wo.Oscilloscope.on = !wo.Oscilloscope.on
+	// 		}
+	// 	}
+	// }
 
 	// Swap pools.
 	// If layout step was skipped, it will return buffers to the correct order.
@@ -1637,9 +1638,18 @@ skiplayout:
 	}
 }
 
+// Run runs the world, calling the onevent function on every event.
+func (wo *World) Run(onevent func()) {
+	for wo.Next() {
+		onevent()
+		wo.Develop()
+	}
+}
+
 // Next prepares the Contraption for rendering the next frame.
 // See package description for preferred use of Contraption.
 func (wo *World) Next() bool {
+	// NOTE Next()/Develop() is easier to debug
 	wo.MatchCount = 0
 
 	window := wo.Window

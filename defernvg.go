@@ -65,10 +65,28 @@ type contextFont struct {
 // TODO All transformations must be resolved by Context, not by the backend.
 type Context struct {
 	publicContext
-	state           uintptr
-	hash            [512]byte
-	hasher          hash.Hash
-	meaningfulBytes []byte
+	state  uintptr
+	hash   [512]byte
+	hasher hash.Hash
+
+	parent *Context
+}
+
+// Sub returns a persistent context that could be replayed later.
+func (c *Context) Sub() *Context {
+	// NOTE Subcontexts are not hashed.
+	return &Context{
+		state:  c.state, // TODO Subcontexts are not required to Begin/EndFrame
+		parent: c,
+		publicContext: publicContext{
+			fs: c.fs,
+		}}
+}
+
+// Replay replays the subordinating context of the current.
+func (c *Context) Replay(sub *Context) {
+	c.Log = append(c.Log, sub.Log...)
+	// TODO Use opReplay and replay at the interpretation time.
 }
 
 func newContext() *Context {
@@ -111,6 +129,9 @@ func (c *Context) assertPathStarted() {
 }
 
 func (c *Context) assertFrameStarted() {
+	if c.parent != nil {
+		return
+	}
 	if c.state != functag((*Context).BeginFrame) && c.state != 1 {
 		panic(`contraption.Context: caller was called before BeginFrame`)
 	}
@@ -141,12 +162,18 @@ func (c *Context) add(f any, op nvguop) uintptr {
 	op.tag = functag(f)
 	c.Log = append(c.Log, op)
 	// TODO FNV-1a adds >2% of cpu usage, without any benefits
+	// Also previous testing shows that there are several hundreds of megabytes per second
+	// passing through the hash when actively moving a mouse.
+	p := c
+	for ; p.parent != nil; p = p.parent {
+	}
 	ap := func(bs []byte) {
-		c.meaningfulBytes = append(c.meaningfulBytes, bs...)
+		p.hasher.Write(bs)
 	}
 	if op.runes != nil {
 		for _, r := range op.runes {
-			c.meaningfulBytes = utf8.AppendRune(c.meaningfulBytes, r)
+			bb := [8]byte{}
+			c.hasher.Write(bb[:utf8.EncodeRune(bb[:], r)])
 		}
 	}
 	ap(asbs(op.tag))
@@ -219,6 +246,7 @@ const (
 	opSetTextLetterSpacing
 	opSetTextLineHeight
 	opTextRune
+	opReplay
 )
 
 /* Frame and context state */
@@ -251,6 +279,9 @@ func (c *Context) Delete() {
 /* Images */
 
 func (c *Context) CreateImageRGBA(w, h int, imageFlags nanovgo.ImageFlags, data []byte) int {
+	if c.parent != nil {
+		panic(`contraption.Context: can't create image from subcontext`)
+	}
 	c.Images = append(c.Images, contextImage{
 		Image:      nil,
 		data:       data,
@@ -263,6 +294,9 @@ func (c *Context) CreateImageRGBA(w, h int, imageFlags nanovgo.ImageFlags, data 
 	return len(c.Images)
 }
 func (c *Context) CreateImageFromGoImage(imageFlag nanovgo.ImageFlags, img image.Image) int {
+	if c.parent != nil {
+		panic(`contraption.Context: can't create image from subcontext`)
+	}
 	c.Images = append(c.Images, contextImage{
 		Image:      img,
 		ImageFlags: imageFlag,
@@ -291,6 +325,9 @@ func (c *Context) ImageSize(img int) (int, int, error) {
 /* Fonts */
 
 func (c *Context) CreateFontFromMemory(name string, data []byte, freeData uint8) int {
+	if c.parent != nil {
+		panic(`contraption.Context: can't create font from subcontext`)
+	}
 	c.Fonts = append(c.Fonts, contextFont{
 		data:     data,
 		freeData: freeData,
@@ -589,6 +626,10 @@ const maxFontTextures = 4
 func (c *Context) TextRune(x, y float64, runes []rune) float64 {
 	c.assertFrameStarted()
 
+	p := c
+	for ; p.parent != nil; p = p.parent {
+	}
+
 	scale := float64(min(c.CurrentTransform().GetAverageScale(), 4)) * c.devicePxRatio // TODO Extract the diagonal from current transform.
 	invScale := 1.0 / scale
 	if c.hfont < 0 {
@@ -601,9 +642,9 @@ func (c *Context) TextRune(x, y float64, runes []rune) float64 {
 	c.fs.SetAlign(fontstashmini.ALIGN_LEFT)
 	c.fs.SetFont(c.hfont)
 
-	left := len(c.SpriteUnits)
+	left := len(p.SpriteUnits)
 	right := left + max(2, len(runes)) // Not less than two quads.
-	c.SpriteUnits = append(c.SpriteUnits, make([]SpriteUnit, right-left)...)
+	p.SpriteUnits = append(p.SpriteUnits, make([]SpriteUnit, right-left)...)
 
 	iter := c.fs.TextIterForRunes(float32(x*scale), float32(y*scale), runes)
 	prevIter := iter
@@ -624,7 +665,7 @@ func (c *Context) TextRune(x, y float64, runes []rune) float64 {
 			quad, _ = iter.Next() // try again
 		}
 		prevIter = iter
-		c.SpriteUnits[left:right][i] = SpriteUnit{
+		p.SpriteUnits[left:right][i] = SpriteUnit{
 			Hfont: c.hfont,
 			Clip:  geom.Rect(float64(quad.X0), float64(quad.Y0), float64(quad.X1), float64(quad.Y1)),
 			Tc:    geom.Rect(float64(quad.S0), float64(quad.T0), float64(quad.S1), float64(quad.T1)),

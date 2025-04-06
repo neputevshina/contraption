@@ -70,7 +70,7 @@ func main() {
 		return Sorm{}
 	})
 
-	for wo.Next() {
+	wo.Run(func() {
 		if wo.Match(`!Release(Ctrl)* Press(Ctrl)`) {
 			if wo.Match(`Scroll(-1)`) {
 				scale += 0.1
@@ -144,8 +144,7 @@ func main() {
 			),
 		)
 
-		wo.Develop()
-	}
+	})
 }
 
 func (wo *World) Examples() Sorm {
@@ -363,7 +362,7 @@ func (wo *World) Drop(filename *string, mime string) Sorm {
 			if mime != `` {
 				pat = `Drop(` + mime + `):in`
 			}
-			if m.Match(pat) {
+			if m.Match(contraption.Regexp(pat)) {
 				*filename = wo.Trace[0].E.(contraption.Drop).Paths[0]
 			}
 		})
