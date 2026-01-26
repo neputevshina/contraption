@@ -63,7 +63,7 @@ func main() {
 	// println(f.Captoem(53))
 	// wo.Vgo.CreateFontFromMemory("asdf", goregular.TTF, 0)
 
-	contraption.AddDragEffect(wo.World, func(interval [2]geom.Point, f *float64) Sorm {
+	contraption.AddDrag(wo.World, func(interval [2]geom.Point, f *float64) Sorm {
 		r := wo.Prevkey(Tag(f, 1)).Rectangle()
 		*f = (interval[1].X - r.Min.X) / r.Dx()
 		*f = max(0, min(*f, 1))
@@ -103,13 +103,15 @@ func main() {
 						p = `#00000000`
 					case contraption.Drop:
 						p = `#ff00ff`
+					case contraption.Scroll:
+						p = `#0000ff`
 					}
 					_ = h
 					return wo.Compound(
-						wo.Rectangle(-1, -h),
+						wo.Rectangle(20, 20*h),
 						wo.Fill(hexpaint(p)))
 				})),
-				wo.Limit(0, 10),
+				// wo.Limit(0, 10),
 				wo.Hfollow(),
 				wo.Valign(0)),
 			wo.Compound(

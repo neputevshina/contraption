@@ -440,7 +440,7 @@ type imagestruct struct {
 	origsiz geom.Point
 }
 
-func AddDragEffect[T any](wo *World, convert func(interval [2]geom.Point, drag T) Sorm) {
+func AddDrag[T any](wo *World, convert func(interval [2]geom.Point, drag T) Sorm) {
 	var z T
 	wo.dragEffects[typeof(z)] = func(interval [2]geom.Point, drag any) Sorm {
 		return convert(interval, drag.(T))

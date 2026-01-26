@@ -108,7 +108,7 @@ func (wo *Events) next() bool {
 }
 
 func (u *Events) emit(ev interface{}, pt geom.Point, t time.Time) {
-	m := EventPoint{ev, pt, t, 0, 0}
+	m := EventPoint{ev, pt, t, 0, 0, 0}
 	// Skip events if application is lagging.
 	u.tempcur = min(len(u.temp)-1, u.tempcur)
 	u.temp[u.tempcur] = m
@@ -127,7 +127,7 @@ func (u *Events) trueemit(ev interface{}, pt geom.Point, t time.Time) {
 	if _, yes := ev.(EventPoint); yes {
 		panic("can't emit EventPoint")
 	}
-	m := EventPoint{ev, pt, t, 0, 0}
+	m := EventPoint{ev, pt, t, 0, 0, 0}
 
 	if u.rec == 1 {
 		u.records = append(u.records, m)
@@ -137,10 +137,12 @@ func (u *Events) trueemit(ev interface{}, pt geom.Point, t time.Time) {
 	// u.SetDeadline(t.Add(100 * time.Millisecond))
 
 	// If the just happened event is the same type and value as the latest event in Trace,
-	// the latter is pushed to Details and replaced with former.
+	// we count it as a repeat and don't grow the trace.
 	// This behavior may be not the same for types of events that might be added in future.
-	if ev == u.Trace[0].E && pt == u.Trace[0].Pt {
+	if ev == u.Trace[0].E {
+		repeats := u.Trace[0].Rs
 		u.Trace[0] = m
+		u.Trace[0].Rs = repeats + 1
 		return
 	}
 

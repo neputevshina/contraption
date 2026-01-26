@@ -16,6 +16,7 @@ type EventPoint struct {
 	E     interface{}
 	Pt    geom.Point
 	T     time.Time
+	Rs    int
 	z, zc int
 }
 
