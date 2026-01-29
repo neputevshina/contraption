@@ -58,18 +58,13 @@ func (wo *World) windowDevelop() {
 		wo.BeforeVgo()
 	}
 	wo.BeforeVgo = nil
-	oldhash := wo.Vgo.EndFrame()
-	c := wo.Vgo
+	_ = wo.Vgo.EndFrame()
 	if wo.Events.tempcur == 0 {
-		oldhash = c.hash
-		c.hasher.Sum(c.hash[:0])
-		c.hasher.Reset()
-		if oldhash != wo.Vgo.hash {
-			// println(oldhash, wo.Vgo.hash)
-			// Retain if was not changed
-			runcontext(wo.cctx, wo.Vgo)
-			wo.Window.SwapBuffers()
-		}
+
+		// Retain if was not changed
+		runcontext(wo.cctx, wo.Vgo)
+		wo.Window.SwapBuffers()
+
 	}
 	wo.Vgo.Log = wo.Vgo.Log[:0]
 	// wo.Vgo.EndFrame()

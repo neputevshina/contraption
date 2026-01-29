@@ -374,15 +374,16 @@ type Equation interface {
 // TODO Nesting sequences and scissors with []pools
 type pools struct {
 	nextn   int
-	pool    []Sorm
+	zorder  []Sorm
+	pool    []*Sorm
 	auxn    int
-	auxpool []Sorm
+	auxpool []*Sorm
 	prefix  int
 
-	old    []Sorm
-	auxold []Sorm
+	old    []*Sorm
+	auxold []*Sorm
 
-	bufferstash []Sorm
+	bufferstash []*Sorm
 
 	cropped  []*Sorm
 	cropping int
@@ -394,7 +395,7 @@ type World struct {
 
 	Window Window
 
-	tmp []Sorm
+	tmp []*Sorm
 
 	pools
 
@@ -420,7 +421,7 @@ type World struct {
 	drag        any
 	dragstart   geom.Point
 	sinks       []func(any)
-	dragEffects map[reflect.Type]func(interval [2]geom.Point, drag any) Sorm
+	dragEffects map[reflect.Type]func(interval [2]geom.Point, drag any) *Sorm
 
 	showOutlines bool
 	f1           bool
@@ -440,9 +441,9 @@ type imagestruct struct {
 	origsiz geom.Point
 }
 
-func AddDrag[T any](wo *World, convert func(interval [2]geom.Point, drag T) Sorm) {
+func AddDrag[T any](wo *World, convert func(interval [2]geom.Point, drag T) *Sorm) {
 	var z T
-	wo.dragEffects[typeof(z)] = func(interval [2]geom.Point, drag any) Sorm {
+	wo.dragEffects[typeof(z)] = func(interval [2]geom.Point, drag any) *Sorm {
 		return convert(interval, drag.(T))
 	}
 }
@@ -512,19 +513,19 @@ type Index struct {
 	O float64
 }
 
-func (s Sorm) auxkids(wo *World) []Sorm {
+func (s Sorm) auxkids(wo *World) []*Sorm {
 	return wo.auxpool[s.kidsl:s.kidsr]
 }
 
-func (s Sorm) kids2(wo *World) []Sorm {
+func (s Sorm) kids2(wo *World) []*Sorm {
 	return wo.pool[s.kidsl:s.kidsr]
 }
 
-func (s Sorm) mods(wo *World) []Sorm {
+func (s Sorm) mods(wo *World) []*Sorm {
 	return wo.pool[s.modsl:s.modsr]
 }
 
-func (s Sorm) pres(wo *World) []Sorm {
+func (s Sorm) pres(wo *World) []*Sorm {
 	return wo.pool[s.presl:s.presr]
 }
 
@@ -533,14 +534,14 @@ func (wo *World) allocmain(n int) (left, right int) {
 	return alloc(&wo.pool, n)
 }
 
-// allocaux is wo.alloc for wo.auxpool.
+// allocaux is wo.allocmain for wo.auxpool.
 func (wo *World) allocaux(n int) (left, right int) {
 	return alloc(&wo.auxpool, n)
 }
 
-func alloc(pool *[]Sorm, n int) (left, right int) {
+func alloc(pool *[]*Sorm, n int) (left, right int) {
 	if len(*pool)+n > cap(*pool) {
-		*pool = append(*pool, make([]Sorm, n)...)
+		*pool = append(*pool, make([]*Sorm, n)...)
 	} else {
 		*pool = (*pool)[0 : len(*pool)+n]
 	}
@@ -555,16 +556,16 @@ func alloc(pool *[]Sorm, n int) (left, right int) {
 //
 // wo.alloc() which previously looked like this is fixed now by using indices in
 // Sorms instead of slices.
-func (wo *World) tmpalloc(n int) []Sorm {
+func (wo *World) tmpalloc(n int) []*Sorm {
 	if len(wo.tmp)+n > cap(wo.tmp) {
-		wo.tmp = append(wo.tmp, make([]Sorm, n)...)
+		wo.tmp = append(wo.tmp, make([]*Sorm, n)...)
 	} else {
 		wo.tmp = wo.tmp[0 : len(wo.tmp)+n]
 	}
 	return wo.tmp[len(wo.tmp)-n:]
 }
 
-func (wo *World) stash(s []Sorm) []Sorm {
+func (wo *World) stash(s []*Sorm) []*Sorm {
 	dst := wo.tmpalloc(len(s))
 	copy(dst, s)
 	return dst
@@ -645,10 +646,10 @@ func (wo *World) BaseWorld() *World {
 	return wo
 }
 
-func (wo *World) beginsorm() (s Sorm) {
+func (wo *World) beginsorm() *Sorm {
 	wo.nextn++
 
-	s = Sorm{
+	s := Sorm{
 		z:     wo.nextn,
 		m:     geom.Identity2d(),
 		postm: geom.Identity2d(),
@@ -662,10 +663,11 @@ func (wo *World) beginsorm() (s Sorm) {
 		s.z2 = wo.nextn
 		s.flags = flagSequenceMark
 	}
-	return
+	wo.zorder = append(wo.zorder, s)
+	return &wo.zorder[len(wo.zorder)-1]
 }
 
-func (wo *World) endsorm(s Sorm) {
+func (wo *World) endsorm(s *Sorm) {
 	// wr := wo.hasher.Write
 	// Note that at the moment endsorm() is called it is creating the tree description.
 	// So every value here is not processed in any way.
@@ -690,58 +692,58 @@ func (wo *World) allowed(s *Sorm) bool {
 	return true
 }
 
-func (wo *World) Prevkey(key any) Sorm {
+func (wo *World) Prevkey(key any) *Sorm {
 	for _, z := range wo.old {
 		if z.tag == 0 && z.key == key {
 			return z
 		}
 	}
-	return Sorm{}
+	return nil
 }
 
-func (s Sorm) Fill(p nanovgo.Paint) Sorm {
+func (s *Sorm) Fill(p nanovgo.Paint) *Sorm {
 	s.fill = p
 	return s
 }
 
-func (s Sorm) Stroke(p nanovgo.Paint) Sorm {
+func (s *Sorm) Stroke(p nanovgo.Paint) *Sorm {
 	s.stroke = p
 	return s
 }
 
-func (s Sorm) Strokewidth(w float64) Sorm {
+func (s *Sorm) Strokewidth(w float64) *Sorm {
 	s.strokew = w
 	s.flags |= flagSetStrokewidth
 	return s
 }
 
-func (s Sorm) FillStroke(p nanovgo.Paint) Sorm {
+func (s *Sorm) FillStroke(p nanovgo.Paint) *Sorm {
 	s.stroke = p
 	s.fill = p
 	return s
 }
 
-func (s Sorm) CondFill(f func(rect geom.Rectangle) nanovgo.Paint) Sorm {
+func (s *Sorm) CondFill(f func(rect geom.Rectangle) nanovgo.Paint) *Sorm {
 	s.condfill = f
 	return s
 }
 
-func (s Sorm) CondStroke(f func(rect geom.Rectangle) nanovgo.Paint) Sorm {
+func (s *Sorm) CondStroke(f func(rect geom.Rectangle) nanovgo.Paint) *Sorm {
 	s.condstroke = f
 	return s
 }
 
-func (s Sorm) CondFillStroke(f func(rect geom.Rectangle) (nanovgo.Paint, nanovgo.Paint)) Sorm {
+func (s *Sorm) CondFillStroke(f func(rect geom.Rectangle) (nanovgo.Paint, nanovgo.Paint)) *Sorm {
 	s.condfillstroke = f
 	return s
 }
 
-func (s Sorm) Cond(f func(Matcher)) Sorm {
+func (s *Sorm) Cond(f func(Matcher)) *Sorm {
 	s.cond = f
 	return s
 }
 
-func (s Sorm) Lmb(wo *World, f func()) Sorm {
+func (s *Sorm) Lmb(wo *World, f func()) *Sorm {
 	s.cond = func(m Matcher) {
 		if m.Nochoke().Match(`Click(1):in`) {
 			f()
@@ -750,39 +752,42 @@ func (s Sorm) Lmb(wo *World, f func()) Sorm {
 	return s
 }
 
-func (s Sorm) Override() Sorm {
+func (s *Sorm) Override() *Sorm {
 	s.flags |= flagOvrx | flagOvry
 	return s
 }
 
-func (s Sorm) Hoverride() Sorm {
+func (s *Sorm) Hoverride() *Sorm {
 	s.flags |= flagOvrx
 	return s
 }
 
-func (s Sorm) Voverride() Sorm {
+func (s *Sorm) Voverride() *Sorm {
 	s.flags |= flagOvry
 	return s
 }
 
-func (s Sorm) Betweener() Sorm {
+func (s *Sorm) Betweener() *Sorm {
 	s.flags |= flagBetweener
 	return s
 }
 
-func (s Sorm) Resize(x, y float64) Sorm {
+func (s *Sorm) Resize(x, y float64) *Sorm {
 	s.Size.X = x
 	s.Size.Y = y
 	return s
 }
 
-func (s Sorm) Rectangle() geom.Rectangle {
+func (s *Sorm) Rectangle() geom.Rectangle {
+	if s == nil {
+		return geom.Rectangle{}
+	}
 	return geom.Rect(s.p.X, s.p.Y, s.p.X+s.Size.X, s.p.Y+s.Size.Y)
 }
 
 // Cat returns a Compound from two Sorm sources.
 // Its intended usage is for defining user's own abstractions.
-func (wo *World) Cat(a, b []Sorm) (s Sorm) {
+func (wo *World) Cat(a, b []*Sorm) (s *Sorm) {
 	tmp := wo.tmpalloc(len(a) + len(b))
 	copy(tmp[:len(a)], a)
 	copy(tmp[len(a):], b)
@@ -792,23 +797,23 @@ func (wo *World) Cat(a, b []Sorm) (s Sorm) {
 // Compound is a shape container.
 // It combines multiple Sorms into a single shape.
 // Every other container is just a rebranded Compound.
-func (wo *World) Compound(args ...Sorm) (s Sorm) {
+func (wo *World) Compound(args ...*Sorm) (s *Sorm) {
 	s = wo.compound(wo.beginsorm(), args...)
 	wo.endsorm(s)
 	return
 }
 
-func (wo *World) realroot(args ...Sorm) Sorm {
+func (wo *World) realroot(args ...*Sorm) *Sorm {
 	return wo.compound2(wo.beginsorm(), true, args...)
 }
 
-func (wo *World) compound(s Sorm, args ...Sorm) Sorm {
+func (wo *World) compound(s *Sorm, args ...*Sorm) *Sorm {
 	return wo.compound2(s, false, args...)
 }
 
-func (wo *World) compound2(s Sorm, realroot bool, args ...Sorm) Sorm {
+func (wo *World) compound2(s *Sorm, realroot bool, args ...*Sorm) *Sorm {
 	var kidc, modc, prec, btwc int
-	var void func() Sorm
+	var void func() *Sorm
 
 	if realroot {
 		s.l.X = wo.Wwin
@@ -816,8 +821,11 @@ func (wo *World) compound2(s Sorm, realroot bool, args ...Sorm) Sorm {
 	}
 
 	for _, a := range args {
+		if a == nil {
+			continue
+		}
 		if a.tag == tagBetween {
-			void = a.key.(func() Sorm)
+			void = a.key.(func() *Sorm)
 		}
 		switch {
 		case a.tag >= 0:
@@ -850,6 +858,9 @@ func (wo *World) compound2(s Sorm, realroot bool, args ...Sorm) Sorm {
 	s.kidsl, s.kidsr = wo.alloc(kidc)
 	i := 0
 	for _, a := range args {
+		if a == nil {
+			continue
+		}
 		if a.tag >= 0 {
 			s.kids2(wo)[i] = a
 			i++
@@ -867,6 +878,9 @@ func (wo *World) compound2(s Sorm, realroot bool, args ...Sorm) Sorm {
 	s.modsl, s.modsr = wo.alloc(modc)
 	i, j := 0, 0
 	for _, a := range args {
+		if a == nil {
+			continue
+		}
 		switch {
 		case a.tag < -100:
 			s.pres(wo)[i] = a
@@ -880,22 +894,22 @@ func (wo *World) compound2(s Sorm, realroot bool, args ...Sorm) Sorm {
 	return s
 }
 
-func (wo *World) Root(s ...Sorm) {
+func (wo *World) Root(s ...*Sorm) {
 	wo.Compound(
 		wo.Void(complex(wo.Wwin, 0), complex(wo.Hwin, 0)),
-		func() Sorm {
+		func() *Sorm {
 			if wo.dragEffects[typeof(wo.drag)] != nil && wo.drag != nil {
 				ps := [2]geom.Point{wo.dragstart, wo.Trace[0].Pt}
 				return wo.dragEffects[typeof(wo.drag)](ps, wo.drag)
 			}
-			return Sorm{}
+			return nil
 		}(),
-		wo.displayOscilloscope(),
+		// wo.displayOscilloscope(),
 		wo.realroot(s...))
 	wo.rend = len(wo.pool)
 }
 
-func (wo *World) beginvirtual() (pool []Sorm) {
+func (wo *World) beginvirtual() (pool []*Sorm) {
 	if sameslice(wo.pool, wo.auxpool) {
 		panic(`contraption: nested Sequences are not allowed`)
 	}
@@ -905,7 +919,7 @@ func (wo *World) beginvirtual() (pool []Sorm) {
 	return
 }
 
-func (wo *World) endvirtual(pool []Sorm) {
+func (wo *World) endvirtual(pool []*Sorm) {
 	wo.auxpool = wo.pool
 	wo.pool = pool
 	wo.nextn, wo.auxn = wo.auxn, wo.nextn
@@ -927,7 +941,7 @@ func (s *Sorm) kidsiter(wo *World, a kiargs, f func(k *Sorm)) {
 	kids := wo.pool[s.kidsl:s.kidsr]
 out:
 	for i := range kids {
-		k := &kids[i]
+		k := kids[i]
 
 		q, ok := k.key.(Sequence)
 		if ok {
@@ -938,13 +952,13 @@ out:
 				pop := wo.beginvirtual()
 				wo.prefix = k.z
 				wo.bufferstash = wo.bufferstash[:0]
-				var buf [32]Sorm
+				var buf [32]*Sorm
 			out2:
 				for i := 0; i < q.Length(wo); i += len(buf) {
 					// println(i, len(buf), i+len(buf), q.Length(wo))
 					n := q.Get(wo, i, buf[:])
 					for j := 0; j < min(n, len(buf)); j++ {
-						f(&buf[j])                               // (1)
+						f(buf[j])                                // (1)
 						if buf[j].flags&flagBreakIteration > 0 { // (2)
 							break out2
 						}
@@ -967,7 +981,7 @@ out:
 			} else {
 				aux := wo.auxpool[k.presl:k.presr]
 				for i := range aux {
-					k := &aux[i]
+					k := aux[i]
 					pop := wo.beginvirtual()
 					f(k) // (1)
 					wo.endvirtual(pop)
@@ -985,31 +999,31 @@ out:
 	}
 }
 
-func (wo *World) topbreadthiter(pool []Sorm, f func(s, _ *Sorm)) {
+func (wo *World) topbreadthiter(pool []*Sorm, f func(s, _ *Sorm)) {
 	wo.breadthiter(pool, f, false)
 }
 
-func (wo *World) bottombreadthiter(pool []Sorm, f func(s, _ *Sorm)) {
+func (wo *World) bottombreadthiter(pool []*Sorm, f func(s, _ *Sorm)) {
 	wo.breadthiter(pool, f, true)
 }
 
-func (wo *World) breadthiter(pool []Sorm, f func(s, _ *Sorm), bottomup bool) {
-	z := func(pool []Sorm) int { return len(pool) - 1 }
-	p := func(i int, _ []Sorm) bool { return i >= 0 }
+func (wo *World) breadthiter(pool []*Sorm, f func(s, _ *Sorm), bottomup bool) {
+	z := func(pool []*Sorm) int { return len(pool) - 1 }
+	p := func(i int, _ []*Sorm) bool { return i >= 0 }
 	d := -1
 	if bottomup {
-		z = func(_ []Sorm) int { return 0 }
-		p = func(i int, pool []Sorm) bool { return i < len(pool) }
+		z = func(_ []*Sorm) int { return 0 }
+		p = func(i int, pool []*Sorm) bool { return i < len(pool) }
 		d = +1
 	}
 
 	for i := z(pool); p(i, pool); i += d {
-		s := &pool[i]
+		s := pool[i]
 		if s.tag == tagSequence {
 			v := wo.beginvirtual()
 			pool := wo.auxpool[s.kidsl:s.kidsr]
 			for j := z(pool); p(j, pool); j += d {
-				s := &pool[j]
+				s := pool[j]
 				if wo.allowed(s) {
 					f(s, s)
 				}
@@ -1195,7 +1209,7 @@ func (wo *World) prepass(_ *Sorm, c *Sorm, one bool) {
 		return
 	}
 
-	slices.SortFunc(c.pres(wo), func(a, b Sorm) int {
+	slices.SortFunc(c.pres(wo), func(a, b *Sorm) int {
 		return int(b.tag - a.tag)
 		// Premodifiers have order of execution.
 	})
@@ -1204,7 +1218,7 @@ func (wo *World) prepass(_ *Sorm, c *Sorm, one bool) {
 		if m.tag == tagLimit && (m.Size.X >= 0 || m.Size.Y >= 0) {
 			continue
 		}
-		preActions[-100-m.tag](wo, c, &m)
+		preActions[-100-m.tag](wo, c, m)
 	}
 
 	if wo.cropping == 0 {
@@ -1256,7 +1270,7 @@ func (wo *World) apply(p *Sorm, c *Sorm) {
 	// apply presumes that premodifiers are already sorted.
 	for _, m := range c.pres(wo) {
 		if m.tag == tagLimit && (m.Size.X >= 0 || m.Size.Y >= 0) {
-			preActions[-100-m.tag](wo, c, &m)
+			preActions[-100-m.tag](wo, c, m)
 		}
 	}
 
@@ -1300,7 +1314,7 @@ func (wo *World) apply(p *Sorm, c *Sorm) {
 
 	// Apply postorder/anyorder modifiers.
 	for _, m := range c.mods(wo) {
-		modActions[-m.tag](wo, c, &m)
+		modActions[-m.tag](wo, c, m)
 	}
 
 	c.kidsiter(wo, kiargs{}, func(k *Sorm) {
@@ -1321,7 +1335,7 @@ func (wo *World) apply(p *Sorm, c *Sorm) {
 	}
 }
 
-func (wo *World) layout(pool []Sorm, root ...*Sorm) {
+func (wo *World) layout(pool []*Sorm, root ...*Sorm) {
 	// Resolve premodifiers and stack negative sizes.
 	for i := range root {
 		wo.prepass(nil, root[i], i == 0 && wo.cropping == 0)
@@ -1394,18 +1408,18 @@ func (wo *World) Develop() {
 	}
 
 	{
-		root := &wo.pool[len(wo.pool)-1]
+		root := wo.pool[len(wo.pool)-1]
 		root.l.X = wo.Wwin
 		root.l.Y = wo.Hwin
 	}
 
 	for i := len(pool) - 1; i >= 0; i-- {
-		s := &pool[i]
+		s := pool[i]
 		s.i = i
 	}
 
 	wo.cropping = 0
-	wo.layout(pool, last(pool))
+	wo.layout(pool, *last(pool))
 	wo.cropping = 1
 	wo.layout(pool, wo.cropped...)
 	wo.cropping = 2
@@ -1430,7 +1444,7 @@ func (wo *World) Develop() {
 	}
 
 	// Sort in draw order.
-	slices.SortFunc(pool, func(a, b Sorm) int {
+	slices.SortFunc(pool, func(a, b *Sorm) int {
 		return a.z - b.z
 	})
 	// After this point, (*Sorm).kidsiter won't work because indices are broken.
@@ -1438,7 +1452,7 @@ func (wo *World) Develop() {
 skiplayout:
 	// Apply conditional paints, match drag-and-drop events, handle scrolls.
 	for i := len(pool) - 1; i >= 0; i-- {
-		s := &pool[i]
+		s := pool[i]
 		r := geom.Rect(s.p.X, s.p.Y, s.p.X+s.Size.X, s.p.Y+s.Size.Y)
 		if s.condfillstroke != nil {
 			s.fill, s.stroke = s.condfillstroke(r)
@@ -1546,12 +1560,12 @@ skiplayout:
 			return false
 		}
 		for i := range pool {
-			if draw(&pool[i]) {
+			if draw(pool[i]) {
 				continue
 			}
 		}
 		for i := range auxpool {
-			if draw(&auxpool[i]) {
+			if draw(auxpool[i]) {
 				continue
 			}
 		}
@@ -1578,12 +1592,12 @@ skiplayout:
 			return false
 		}
 		for i := range pool {
-			if draw2(&pool[i]) {
+			if draw2(pool[i]) {
 				continue
 			}
 		}
 		for i := range auxpool {
-			if draw2(&auxpool[i]) {
+			if draw2(auxpool[i]) {
 				continue
 			}
 		}
@@ -1617,6 +1631,7 @@ skiplayout:
 	wo.auxn = 0
 	zeroandclear(&wo.tmp)
 	zeroandclear(&wo.cropped)
+	zeroandclear(&wo.zorder)
 
 	wo.sinks = wo.sinks[:1]
 
@@ -1748,7 +1763,7 @@ func (wo *World) recorder() {
 	}
 }
 
-func sormp(wo *World, s Sorm, tab int) {
+func sormp(wo *World, s *Sorm, tab int) {
 	println(fmt.Sprint(strings.Repeat("| ", tab), s))
 	for _, s := range s.pres(wo) {
 		sormp(wo, s, tab+1)
@@ -1757,7 +1772,7 @@ func sormp(wo *World, s Sorm, tab int) {
 		sormp(wo, s, tab+1)
 	}
 	s.kidsiter(wo, kiargs{}, func(k *Sorm) {
-		sormp(wo, *k, tab+1)
+		sormp(wo, k, tab+1)
 	})
 }
 
@@ -1821,7 +1836,7 @@ func New(config Config) (wo *World) {
 	wo.sinks = make([]func(any), 1)
 	wo.keys = map[any]*labelt{}
 	wo.images = map[io.Reader]imagestruct{}
-	wo.dragEffects = map[reflect.Type]func(interval [2]geom.Point, drag any) Sorm{}
+	wo.dragEffects = map[reflect.Type]func(interval [2]geom.Point, drag any) *Sorm{}
 	wo.alloc = wo.allocmain
 	return wo
 }

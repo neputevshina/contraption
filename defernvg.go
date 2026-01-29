@@ -1,11 +1,8 @@
 package contraption
 
 import (
-	"crypto/sha1"
-	"hash"
 	"image"
 	"reflect"
-	"unicode/utf8"
 
 	"github.com/neputevshina/contraption/nanovgo"
 	"github.com/neputevshina/contraption/nanovgo/fontstashmini"
@@ -65,9 +62,7 @@ type contextFont struct {
 // TODO All transformations must be resolved by Context, not by the backend.
 type Context struct {
 	publicContext
-	state  uintptr
-	hash   [512]byte
-	hasher hash.Hash
+	state uintptr
 
 	parent *Context
 }
@@ -95,7 +90,6 @@ func newContext() *Context {
 			fs:     fontstashmini.New(512, 512),
 			Images: []contextImage{{}},
 		},
-		hasher: sha1.New(),
 	}
 }
 
@@ -161,31 +155,10 @@ func functag(f any) uintptr {
 func (c *Context) add(f any, op nvguop) uintptr {
 	op.tag = functag(f)
 	c.Log = append(c.Log, op)
-	// TODO FNV-1a adds >2% of cpu usage, without any benefits
-	// Also previous testing shows that there are several hundreds of megabytes per second
-	// passing through the hash when actively moving a mouse.
+
 	p := c
 	for ; p.parent != nil; p = p.parent {
 	}
-	ap := func(bs []byte) {
-		p.hasher.Write(bs)
-	}
-	if op.runes != nil {
-		for _, r := range op.runes {
-			bb := [8]byte{}
-			c.hasher.Write(bb[:utf8.EncodeRune(bb[:], r)])
-		}
-	}
-	ap(asbs(op.tag))
-	ap(asbs(op.args))
-	ap(asbs(op.iargs))
-	ap(asbs(op.fillc))
-	ap(asbs(op.fillp))
-	ap(asbs(op.strokec))
-	ap(asbs(op.strokep))
-	ap(asbs(op.fontsiz))
-	ap(asbs(op.hfont))
-	ap(asbs(op.himage))
 	return op.tag
 }
 

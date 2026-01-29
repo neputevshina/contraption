@@ -37,19 +37,19 @@ func (s Sorm) paint(wo *World, f func()) {
 	}
 }
 
-func (wo *World) NewText(font []byte) func(size float64, str []rune) Sorm {
+func (wo *World) NewText(font []byte) func(size float64, str []rune) *Sorm {
 	return wo.generalNewText(font, tagText)
 }
 
-func (wo *World) NewTopDownText(font []byte) func(size float64, str []rune) Sorm {
+func (wo *World) NewTopDownText(font []byte) func(size float64, str []rune) *Sorm {
 	return wo.generalNewText(font, tagTopDownText)
 }
 
-func (wo *World) NewBottomUpText(font []byte) func(size float64, str []rune) Sorm {
+func (wo *World) NewBottomUpText(font []byte) func(size float64, str []rune) *Sorm {
 	return wo.generalNewText(font, tagBottomUpText)
 }
 
-func (wo *World) generalNewText(font []byte, kind tagkind) func(size float64, str []rune) Sorm {
+func (wo *World) generalNewText(font []byte, kind tagkind) func(size float64, str []rune) *Sorm {
 	name := strconv.FormatUint(rand.Uint64(), 36)
 	f, err := NewFont(wo.Vgo, font, name)
 	if err != nil {
@@ -60,7 +60,7 @@ func (wo *World) generalNewText(font []byte, kind tagkind) func(size float64, st
 	}
 	wo.nvgofontids = append(wo.nvgofontids, f.Vgoid)
 
-	return func(size float64, str []rune) Sorm {
+	return func(size float64, str []rune) *Sorm {
 		s := wo.beginsorm()
 		s.tag = kind
 
@@ -115,13 +115,13 @@ func generaltextrun(kind tagkind) func(wo *World, s *Sorm) {
 
 // TODO This is the main and preferred method to do vector text.
 // TODO Pool of (Runes)
-func (wo *World) NewVectorTextReader(font []byte) func(size float64, rd io.RuneScanner) Sorm {
+func (wo *World) NewVectorTextReader(font []byte) func(size float64, rd io.RuneScanner) *Sorm {
 	name := strconv.FormatUint(rand.Uint64(), 36)
 	id, err := NewFont(wo.Vgo, font, name)
 	if err != nil {
 		panic(err)
 	}
-	return func(size float64, rd io.RuneScanner) Sorm {
+	return func(size float64, rd io.RuneScanner) *Sorm {
 		s := wo.beginsorm()
 		s.tag = tagVectorText
 		s.Size.Y = size
@@ -133,13 +133,13 @@ func (wo *World) NewVectorTextReader(font []byte) func(size float64, rd io.RuneS
 	}
 }
 
-func (wo *World) NewVectorText(font []byte) func(size float64, str []rune) Sorm {
+func (wo *World) NewVectorText(font []byte) func(size float64, str []rune) *Sorm {
 	name := strconv.FormatUint(rand.Uint64(), 36)
 	id, err := NewFont(wo.Vgo, font, name)
 	if err != nil {
 		panic(err)
 	}
-	return func(size float64, str []rune) Sorm {
+	return func(size float64, str []rune) *Sorm {
 		s := wo.beginsorm()
 		s.tag = tagVectorText
 		s.Size.Y = size
@@ -187,7 +187,7 @@ func vectortextrun(wo *World, s *Sorm) {
 }
 
 // Circle is a circle shape.
-func (wo *World) Circle(d float64) (s Sorm) {
+func (wo *World) Circle(d float64) (s *Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagCircle
 	s.Size.X = d
@@ -202,7 +202,7 @@ func circlerun(wo *World, s *Sorm) {
 }
 
 // Rectangle is a rectangle shape.
-func (wo *World) Rectangle(w, h complex128) (s Sorm) {
+func (wo *World) Rectangle(w, h complex128) (s *Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagRect
 	s.Size.X = real(w)
@@ -219,7 +219,7 @@ func rectrun(wo *World, s *Sorm) {
 }
 
 // Roundrect is a rounded rectangle shape.
-func (wo *World) Roundrect(w, h complex128, r float64) (s Sorm) {
+func (wo *World) Roundrect(w, h complex128, r float64) (s *Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagRoundrect
 	s.Size.X = real(w)
@@ -236,7 +236,7 @@ func roundrectrun(wo *World, s *Sorm) {
 	})
 }
 
-func (wo *World) Void(w, h complex128) (s Sorm) {
+func (wo *World) Void(w, h complex128) (s *Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagVoid
 	s.Size.X = real(w)
@@ -248,7 +248,7 @@ func (wo *World) Void(w, h complex128) (s Sorm) {
 }
 func voidrun(wo *World, s *Sorm) {}
 
-func (wo *World) Equation(eqn Equation) (s Sorm) {
+func (wo *World) Equation(eqn Equation) (s *Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagEquation
 
@@ -289,7 +289,7 @@ func equationrun(wo *World, s *Sorm) {
 }
 
 // Canvas gives a direct access to Nanovgo for painting a vector image.
-func (wo *World) Canvas(w, h complex128, run func(vgo *Context, wt geom.Geom, rect geom.Rectangle)) (s Sorm) {
+func (wo *World) Canvas(w, h complex128, run func(vgo *Context, wt geom.Geom, rect geom.Rectangle)) (s *Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagCanvas
 	s.canvas = run
@@ -319,7 +319,7 @@ func canvasrun(wo *World, s *Sorm) {
 // Sequence transforms external data to stream of shapes.
 //
 // Modifiers in Sequence right now are ignored, but can trigger a panic in future versions.
-func (wo *World) Sequence(q Sequence) (s Sorm) {
+func (wo *World) Sequence(q Sequence) (s *Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagSequence
 	s.key = q
@@ -350,7 +350,7 @@ func sequencerun(wo *World, s *Sorm) {
 //
 // The texture from the image may be interpolated to a smaller size.
 // Deallocation of the texture is the subject to the two-frame policy like any other resource in Contraption.
-func (wo *World) Illustration(w, h complex128, mode string, src io.Reader) (s Sorm) {
+func (wo *World) Illustration(w, h complex128, mode string, src io.Reader) (s *Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagIllustration
 	s.key = src
@@ -441,7 +441,7 @@ func illustrationrun(wo *World, s *Sorm) {
 // Framebuffer is a raw image, possibly frequently updated.
 //
 // Every sizing rule of Illustration applies to Framebuffer.
-// func (wo *World) Framebuffer(fb *Framebuffer, w, h complex128, mode string) (s Sorm) {
+// func (wo *World) Framebuffer(fb *Framebuffer, w, h complex128, mode string) (s *Sorm) {
 // 	s = wo.newSorm()
 // 	s.tag = tagFramebuffer
 // 	s.key = &src[0]

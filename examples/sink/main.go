@@ -30,7 +30,7 @@ var barkov = strings.Split(string(_barkov), "\n")
 type Sorm = contraption.Sorm
 type World struct {
 	*contraption.World
-	Text func(size float64, str []rune) Sorm
+	Text func(size float64, str []rune) *Sorm
 }
 
 var (
@@ -63,11 +63,11 @@ func main() {
 	// println(f.Captoem(53))
 	// wo.Vgo.CreateFontFromMemory("asdf", goregular.TTF, 0)
 
-	contraption.AddDrag(wo.World, func(interval [2]geom.Point, f *float64) Sorm {
+	contraption.AddDrag(wo.World, func(interval [2]geom.Point, f *float64) *Sorm {
 		r := wo.Prevkey(Tag(f, 1)).Rectangle()
 		*f = (interval[1].X - r.Min.X) / r.Dx()
 		*f = max(0, min(*f, 1))
-		return Sorm{}
+		return nil
 	})
 
 	wo.Run(func() {
@@ -85,7 +85,7 @@ func main() {
 		wo.Root(
 			wo.Transform(geom.Scale2d(scale, scale)),
 			wo.Compound(
-				wo.Sequence(contraption.SliceSequence2(wo.Trace[:len(wo.Trace)], func(i int) contraption.Sorm {
+				wo.Sequence(contraption.SliceSequence2(wo.Trace[:len(wo.Trace)], func(i int) *contraption.Sorm {
 					p := `#00000000`
 					h := complex128(1.0)
 					switch wo.Trace[i].E.(type) {
@@ -149,14 +149,14 @@ func main() {
 	})
 }
 
-func (wo *World) Examples() Sorm {
+func (wo *World) Examples() *Sorm {
 	return wo.Compound(
 		wo.Vfollow(),
 		wo.BetweenVoid(0, 64),
 		wo.Compound(
 			wo.Hfollow(),
 			wo.BetweenVoid(32, 0),
-			wo.Example(`Align child's center to container's top`, func() Sorm {
+			wo.Example(`Align child's center to container's top`, func() *Sorm {
 				return wo.Compound(
 					wo.Limit(100, 100),
 					wo.Compound(
@@ -169,7 +169,7 @@ func (wo *World) Examples() Sorm {
 							wo.Rectangle(-1, -1).Fill(yellow),
 							wo.Label(`abc`))))
 			}),
-			wo.Example(`Align child's top to container's center`, func() Sorm {
+			wo.Example(`Align child's top to container's center`, func() *Sorm {
 				return wo.Compound(
 					wo.Limit(100, 100),
 					wo.Compound(
@@ -183,7 +183,7 @@ func (wo *World) Examples() Sorm {
 							wo.Rectangle(-1, -1).Fill(yellow),
 							wo.Label(`abc`))))
 			}),
-			wo.Example(`Horizontal and vertical together`, func() Sorm {
+			wo.Example(`Horizontal and vertical together`, func() *Sorm {
 				return wo.Compound(
 					wo.Limit(100, 100),
 					wo.Compound(
@@ -202,7 +202,7 @@ func (wo *World) Examples() Sorm {
 		wo.Compound(
 			wo.Hfollow(),
 			wo.BetweenVoid(32, 0),
-			wo.Example(`Stretch`, func() Sorm {
+			wo.Example(`Stretch`, func() *Sorm {
 				return wo.Compound(
 					wo.Stroke(dark),
 					wo.Limit(100, 100),
@@ -229,7 +229,7 @@ func (wo *World) Examples() Sorm {
 							wo.Rectangle(-1, -1),
 							wo.Rectangle(-1, -1))))
 			}),
-			wo.Example(`Sliders`, func() Sorm {
+			wo.Example(`Sliders`, func() *Sorm {
 				return wo.Compound(
 					wo.Vfollow(),
 					wo.BetweenVoid(0, 8),
@@ -241,7 +241,7 @@ func (wo *World) Examples() Sorm {
 						wo.Limit(100, 20),
 						wo.Slider(&slider1)))
 			}),
-			wo.Example(`Numbox`, func() Sorm {
+			wo.Example(`Numbox`, func() *Sorm {
 				return wo.Compound(
 					wo.Limit(100, 20),
 					wo.Numbox(&numbox))
@@ -249,14 +249,14 @@ func (wo *World) Examples() Sorm {
 			wo.Compound(
 				wo.Vfollow(),
 				wo.BetweenVoid(0, 8),
-				wo.Example(`File drop`, func() Sorm {
+				wo.Example(`File drop`, func() *Sorm {
 					return wo.Drop(&filename0, ``)
 				}),
-				wo.Example(`File drop, but only for MP3s`, func() Sorm {
+				wo.Example(`File drop, but only for MP3s`, func() *Sorm {
 					return wo.Drop(&filename1, `audio/mpeg`)
 				}),
 			),
-			wo.Example(`Labels`, func() Sorm {
+			wo.Example(`Labels`, func() *Sorm {
 				return wo.Compound(
 					wo.Vfollow(),
 					wo.BetweenVoid(0, 15),
@@ -294,7 +294,7 @@ func (wo *World) Examples() Sorm {
 		wo.Compound(
 			wo.Hfollow(),
 			wo.BetweenVoid(64, 0),
-			wo.Example(`Crop`, func() Sorm {
+			wo.Example(`Crop`, func() *Sorm {
 				return wo.Compound(
 					wo.Limit(100, 100),
 					wo.Crop(),
@@ -308,26 +308,26 @@ func (wo *World) Examples() Sorm {
 							wo.Rectangle(50, 100).Fill(yellow),
 						)))
 			}),
-			wo.Example(`Scroll`, func() Sorm {
+			wo.Example(`Scroll`, func() *Sorm {
 				return wo.Compound(
 					wo.Limit(200, 100),
 					wo.Vfollow(),
 					wo.Crop(),
-					wo.Sequence(contraption.SliceSequence(barkov, func(s string) contraption.Sorm {
+					wo.Sequence(contraption.SliceSequence(barkov, func(s string) *contraption.Sorm {
 						return wo.Compound(
 							wo.Vfollow(),
 							wo.Text(8, []rune(s)).Fill(hexpaint(`#000000`)),
 							wo.Void(0, 8))
 					})))
 			}),
-			wo.Example(`Illustration`, func() Sorm {
+			wo.Example(`Illustration`, func() *Sorm {
 				return wo.Compound(
 					wo.Limit(100, 100),
 					wo.Halign(numbox),
 					wo.Crop(),
 					wo.Illustration(-1, -1, "zoom", okcomputer))
 			}),
-			// wo.Example(`Canvas`, func() Sorm {
+			// wo.Example(`Canvas`, func() *Sorm{
 			// 	return wo.Compound(
 			// 		wo.Limit(100, 100),
 			// 		wo.Halign(numbox),
@@ -347,7 +347,7 @@ func (wo *World) Examples() Sorm {
 		))
 }
 
-func (wo *World) Drop(filename *string, mime string) Sorm {
+func (wo *World) Drop(filename *string, mime string) *Sorm {
 	return wo.Compound(
 		wo.Hshrink(),
 		wo.Halign(0.5),
@@ -370,7 +370,7 @@ func (wo *World) Drop(filename *string, mime string) Sorm {
 		})
 }
 
-func (wo *World) Numbox(v *float64) Sorm {
+func (wo *World) Numbox(v *float64) *Sorm {
 	return wo.Compound(
 		wo.Halign(0.5),
 		wo.Valign(0.5),
@@ -407,9 +407,9 @@ func (wo *World) Numbox(v *float64) Sorm {
 		wo.Label(strconv.FormatFloat(*v, 'f', 2, 64)))
 }
 
-func (wo *World) Slider(v *float64) Sorm {
+func (wo *World) Slider(v *float64) *Sorm {
 	// Here I use drag-and-drop mechanics to implement Slider, but it can be implemented with Cond,
-	// not using DragEffect.
+	// not using AddDrag.
 	// Feedback is used in both cases.
 	return wo.Compound(
 		wo.Halign(*v),
@@ -428,12 +428,12 @@ func (wo *World) Slider(v *float64) Sorm {
 				wo.Circle(20).Fill(yellow))))
 }
 
-func (wo *World) Label(v ...any) Sorm {
+func (wo *World) Label(v ...any) *Sorm {
 	// TODO wo.Text takes io.RuneReader, define and use SprintRuneReader
 	return wo.Text(10, []rune(fmt.Sprint(v...))).Fill(hexpaint(`#000000`))
 }
 
-func (wo *World) Example(label string, ex func() Sorm) Sorm {
+func (wo *World) Example(label string, ex func() *Sorm) *Sorm {
 	return wo.Compound(
 		wo.Vfollow(),
 		ex(),

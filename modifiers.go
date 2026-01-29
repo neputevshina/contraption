@@ -1,11 +1,11 @@
 package contraption
 
 import (
-	"github.com/neputevshina/geom"
 	"github.com/neputevshina/contraption/nanovgo"
+	"github.com/neputevshina/geom"
 )
 
-func (wo *World) Vfollow() (s Sorm) {
+func (wo *World) Vfollow() (s *Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagVfollow
 	wo.endsorm(s)
@@ -15,7 +15,7 @@ func vfollowrun(wo *World, c, m *Sorm) {
 	c.aligner = alignerVfollow
 }
 
-func (wo *World) Hfollow() (s Sorm) {
+func (wo *World) Hfollow() (s *Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagHfollow
 	wo.endsorm(s)
@@ -31,7 +31,7 @@ func hfollowrun(wo *World, c, m *Sorm) {
 // Values between those are acceptable.
 //
 // amt is clipped to the range 0 < amt < 1.
-func (wo *World) Halign(amt float64) (s Sorm) {
+func (wo *World) Halign(amt float64) (s *Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagHalign
 	s.Size.X = clamp(0, amt, 1)
@@ -55,7 +55,7 @@ func halignrun(wo *World, c, m *Sorm) {
 // Values between those are acceptable.
 //
 // amt is clipped to the range 0 < amt < 1.
-func (wo *World) Valign(amt float64) (s Sorm) {
+func (wo *World) Valign(amt float64) (s *Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagValign
 	s.Size.X = clamp(0, amt, 1)
@@ -75,7 +75,7 @@ func valignrun(wo *World, c, m *Sorm) {
 }
 
 // Strokewidth sets the fill paint.
-func (wo *World) Fill(p nanovgo.Paint) (s Sorm) {
+func (wo *World) Fill(p nanovgo.Paint) (s *Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagFill
 	s.fill = p
@@ -91,7 +91,7 @@ func fillrun(wo *World, s, m *Sorm) {
 }
 
 // Strokewidth sets the stroke paint.
-func (wo *World) Stroke(p nanovgo.Paint) (s Sorm) {
+func (wo *World) Stroke(p nanovgo.Paint) (s *Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagStroke
 	s.stroke = p
@@ -107,7 +107,7 @@ func strokerun(wo *World, s, m *Sorm) {
 }
 
 // Strokewidth sets the stroke width.
-func (wo *World) Strokewidth(w float64) (s Sorm) {
+func (wo *World) Strokewidth(w float64) (s *Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagStrokewidth
 	s.strokew = w
@@ -125,7 +125,7 @@ func strokewidthrun(wo *World, s, m *Sorm) {
 
 // Identity gives a compound the key on which it can be retrieved from the layout tree on the
 // next event loop cycle.
-func (wo *World) Identity(key any) (s Sorm) {
+func (wo *World) Identity(key any) (s *Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagIdentity
 	s.key = key
@@ -138,7 +138,7 @@ func identityrun(wo *World, s, m *Sorm) {
 }
 
 // Cond adds an event callback to a compound.
-func (wo *World) Cond(f func(m Matcher)) (s Sorm) {
+func (wo *World) Cond(f func(m Matcher)) (s *Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagCond
 	s.cond = f
@@ -150,7 +150,7 @@ func condrun(wo *World, s, m *Sorm) {
 }
 
 // CondFill adds an event callback to a Compound.
-func (wo *World) CondFill(f func(geom.Rectangle) nanovgo.Paint) (s Sorm) {
+func (wo *World) CondFill(f func(geom.Rectangle) nanovgo.Paint) (s *Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagCondfill
 	s.condfill = f
@@ -161,7 +161,7 @@ func condfillrun(wo *World, s, m *Sorm) {
 	s.condfill = m.condfill
 }
 
-func (wo *World) CondStroke(f func(geom.Rectangle) nanovgo.Paint) (s Sorm) {
+func (wo *World) CondStroke(f func(geom.Rectangle) nanovgo.Paint) (s *Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagCondstroke
 	s.condstroke = f
@@ -173,7 +173,7 @@ func condstrokerun(wo *World, s, m *Sorm) {
 }
 
 // Between adds a Sorm from given constructor between every other shape in a compound.
-func (wo *World) Between(f func() Sorm) (s Sorm) {
+func (wo *World) Between(f func() *Sorm) (s *Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagBetween
 	s.key = f
@@ -185,13 +185,13 @@ func betweenrun(wo *World, s, m *Sorm) {
 }
 
 // BetweenVoid adds a Void between every other shape of a compound.
-func (wo *World) BetweenVoid(w, h complex128) (s Sorm) {
-	return wo.Between(func() Sorm { return wo.Void(w, h) })
+func (wo *World) BetweenVoid(w, h complex128) (s *Sorm) {
+	return wo.Between(func() *Sorm { return wo.Void(w, h) })
 }
 
 // Source marks area of current compound as a drag source.
 // It uses compound's identity (set with Identity modifier) as a drag value.
-func (wo *World) Source() (s Sorm) {
+func (wo *World) Source() (s *Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagSource
 	wo.endsorm(s)
@@ -204,7 +204,7 @@ func sourcerun(wo *World, s *Sorm, m *Sorm) {
 // Sink marks area of current compound as a drag sink.
 // When program receives Release(1) event with mouse cursor inside a sink,
 // it calls given function with the drag value.
-func (wo *World) Sink(f func(drop any)) (s Sorm) {
+func (wo *World) Sink(f func(drop any)) (s *Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagSink
 	s.sinkid = len(wo.sinks)
@@ -219,7 +219,7 @@ func sinkrun(wo *World, s *Sorm, m *Sorm) {
 
 // Hshrink shrinks the horizontal size of a stretchy compound to the size of the
 // children with the maximum known horizontal size.
-func (wo *World) Hshrink() (s Sorm) {
+func (wo *World) Hshrink() (s *Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagHshrink
 	wo.endsorm(s)
@@ -230,7 +230,7 @@ func hshrinkrun(wo *World, s *Sorm, m *Sorm) {
 }
 
 // Vshrink works exactly like Hshrink, but for vertical sizes.
-func (wo *World) Vshrink() (s Sorm) {
+func (wo *World) Vshrink() (s *Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagVshrink
 	wo.endsorm(s)
@@ -241,7 +241,7 @@ func vshrinkrun(wo *World, s *Sorm, m *Sorm) {
 }
 
 // Crop limits the painting area of a compound to its limit.
-func (wo *World) Crop() (s Sorm) {
+func (wo *World) Crop() (s *Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagCrop
 	wo.endsorm(s)
@@ -256,7 +256,7 @@ func croprun(wo *World, s *Sorm, m *Sorm) {
 // the rules of negative units for shapes.
 //
 // TODO Imaginary limits.
-func (wo *World) Limit(w, h float64) (s Sorm) {
+func (wo *World) Limit(w, h float64) (s *Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagLimit
 	s.Size.X, s.Size.Y = w, h
@@ -281,7 +281,7 @@ func limitrun(wo *World, s, m *Sorm) {
 
 // Posttransform applies transformation that only affects objects visually.
 // It doesn't affect object sizes for layout.
-func (wo *World) Posttransform(x, y float64) (s Sorm) {
+func (wo *World) Posttransform(x, y float64) (s *Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagPosttransform
 	s.Size.X = x
@@ -296,7 +296,7 @@ func posttransformrun(wo *World, c, m *Sorm) {
 }
 
 // Transform applies transformation that affects objects sizes for layout.
-func (wo *World) Transform(m geom.Geom) (s Sorm) {
+func (wo *World) Transform(m geom.Geom) (s *Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagTransform
 	s.m = m
@@ -313,7 +313,7 @@ type labelt struct {
 	counter int
 }
 
-func (wo *World) Whereis(s Sorm) Sorm {
+func (wo *World) Whereis(s *Sorm) *Sorm {
 	s.flags |= flagFindme
 	return s
 }
@@ -331,7 +331,7 @@ func (wo *World) Key(k any) (v *any) {
 	return
 }
 
-func (wo *World) Noround() (s Sorm) {
+func (wo *World) Noround() (s *Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagNoround
 	wo.endsorm(s)
@@ -341,7 +341,7 @@ func noroundrun(wo *World, c, m *Sorm) {
 	c.flags |= flagNoround
 }
 
-func (wo *World) Round() (s Sorm) {
+func (wo *World) Round() (s *Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagRound
 	wo.endsorm(s)
@@ -351,7 +351,7 @@ func roundrun(wo *World, c, m *Sorm) {
 	c.flags |= flagRound
 }
 
-func (wo *World) Hscroll(idx *Index, du float64) (s Sorm) {
+func (wo *World) Hscroll(idx *Index, du float64) (s *Sorm) {
 	// TODO Smooth scrolling, rate limiting/exponential decay.
 	s = wo.beginsorm()
 	s.tag = tagHscroll
@@ -363,7 +363,7 @@ func hscrollrun(wo *World, c, m *Sorm) {
 	c.idx = m.idx
 }
 
-func (wo *World) Vscroll(idx *Index, du float64) (s Sorm) {
+func (wo *World) Vscroll(idx *Index, du float64) (s *Sorm) {
 	s = wo.beginsorm()
 	s.tag = tagVscroll
 	s.idx = idx

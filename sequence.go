@@ -4,16 +4,16 @@ import "unicode/utf8"
 
 // Sequence is the thing that can generate elements for a compound.
 type Sequence interface {
-	Get(wo *World, j int, buf []Sorm) (n int)
+	Get(wo *World, j int, buf []*Sorm) (n int)
 	Length(wo *World) int
 }
 
 type adhocSequence struct {
-	get    func(j int) Sorm
+	get    func(j int) *Sorm
 	length func() int
 }
 
-func (s *adhocSequence) Get(wo *World, j int, buf []Sorm) (n int) {
+func (s *adhocSequence) Get(wo *World, j int, buf []*Sorm) (n int) {
 	sl := s.length()
 	for i := 0; i < min(len(buf), sl-j); i++ {
 		buf[i] = s.get(j + i)
@@ -25,16 +25,16 @@ func (s *adhocSequence) Length(wo *World) int {
 	return s.length()
 }
 
-func AdhocSequence(get func(i int) Sorm, length func() int) Sequence {
+func AdhocSequence(get func(i int) *Sorm, length func() int) Sequence {
 	return &adhocSequence{get: get, length: length}
 }
 
-func SliceSequence[T any](sl []T, produce func(T) Sorm) Sequence {
-	return AdhocSequence(func(i int) Sorm { return produce(sl[i]) }, func() int { return len(sl) })
+func SliceSequence[T any](sl []T, produce func(T) *Sorm) Sequence {
+	return AdhocSequence(func(i int) *Sorm { return produce(sl[i]) }, func() int { return len(sl) })
 }
 
-func SliceSequence2[T any](sl []T, produce func(int) Sorm) Sequence {
-	return AdhocSequence(func(i int) Sorm { return produce(i) }, func() int { return len(sl) })
+func SliceSequence2[T any](sl []T, produce func(int) *Sorm) Sequence {
+	return AdhocSequence(func(i int) *Sorm { return produce(i) }, func() int { return len(sl) })
 }
 
 type Scrollptr struct {
@@ -92,10 +92,10 @@ type Scrollptr struct {
 type stringSeq struct {
 	string
 	len, consumed int
-	produce       func(rune) Sorm
+	produce       func(rune) *Sorm
 }
 
-func (s *stringSeq) Get(wo *World, j int, buf []Sorm) (n int) {
+func (s *stringSeq) Get(wo *World, j int, buf []*Sorm) (n int) {
 	for i := 0; i < min(len(buf), s.len); i++ {
 		r, sz := utf8.DecodeRuneInString(s.string[s.consumed:])
 		buf[i] = s.produce(r)
@@ -108,7 +108,7 @@ func (s *stringSeq) Length(wo *World) int {
 	return s.len
 }
 
-func StringSeq(s string, produce func(rune) Sorm) Sequence {
+func StringSeq(s string, produce func(rune) *Sorm) Sequence {
 	return &stringSeq{
 		string:  s,
 		produce: produce,
