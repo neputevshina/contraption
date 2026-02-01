@@ -26,6 +26,8 @@ type EventTraceLast struct {
 }
 
 type Events struct {
+	wer Windower
+
 	Trace    []EventPoint
 	Last     EventTraceLast
 	Now      time.Time
@@ -86,7 +88,7 @@ func (wo *Events) next() bool {
 		now = <-wo.playc
 		// We need to poll events to get the window close event.
 		// If it is not done, window can't be closed in replay mode.
-		concretepoll(wo)
+		wo.wer.PollEvents(wo)
 	}
 
 	if wo.rec < 2 {
@@ -97,9 +99,9 @@ func (wo *Events) next() bool {
 			wo.tempcur--
 		} else {
 			if wo.Now.Compare(wo.deadline) >= 0 {
-				concretewait(wo)
+				wo.wer.WaitEvents(wo)
 			} else {
-				concretepoll(wo)
+				wo.wer.PollEvents(wo)
 			}
 		}
 	}
@@ -326,12 +328,15 @@ func (u *Events) match(p Regexp, rect geom.Rectangle, dur time.Duration, deadlin
 	return ok
 }
 
-func NewEventTracer(w *glfw.Window, replay io.Reader) *Events {
+func NewEventTracer(wer Windower, replay io.Reader) *Events {
 	var u Events
 	u.heldcur = 0
 	u.regexps = map[string][]rinst{}
+	u.Trace = u.tr[tracelen/2 : tracelen-1]
+	u.wer = wer
+
 	if replay == nil {
-		setupcallbacks(&u, w)
+		wer.SetupInputCallbacks(u.emit, &u)
 	} else {
 		// Replay mode disables vsync.
 		// This is the simplest way to synchronize recorded events and state.
@@ -341,8 +346,6 @@ func NewEventTracer(w *glfw.Window, replay io.Reader) *Events {
 		u.playc = make(chan time.Time)
 		go u.replay(replay)
 	}
-
-	u.Trace = u.tr[tracelen/2 : tracelen-1]
 
 	return &u
 }

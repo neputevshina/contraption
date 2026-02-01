@@ -3,6 +3,7 @@ package contraption
 import (
 	"image"
 	"reflect"
+	"time"
 
 	"github.com/neputevshina/contraption/nanovgo"
 	"github.com/neputevshina/contraption/nanovgo/fontstashmini"
@@ -10,51 +11,51 @@ import (
 	"github.com/neputevshina/geom"
 )
 
-type nvguop struct {
-	tag   op.Op
-	args  [10]float64
-	iargs [10]int
+type RenderOp struct {
+	Tag   op.Op
+	Args  [10]float64
+	Iargs [10]int
 
-	fontsiz float64
-	hfont   int
-	himage  int
+	Fontsiz float64
+	Hfont   int
+	Himage  int
 
-	lsp     float64
-	fblur   float64
-	strokep nanovgo.Paint
-	strokec nanovgo.Color
-	fillp   nanovgo.Paint
-	fillc   nanovgo.Color
-	strokew float64
+	Lsp     float64
+	Fblur   float64
+	Strokep nanovgo.Paint
+	Strokec nanovgo.Color
+	Fillp   nanovgo.Paint
+	Fillc   nanovgo.Color
+	Strokew float64
 
-	linecap nanovgo.LineCap
+	Linecap nanovgo.LineCap
 	nanovgo.Direction
 	nanovgo.Winding
 	nanovgo.Align
 	nanovgo.TransformMatrix
 	nanovgo.GlyphPosition
 
-	runes []rune
+	Runes []rune
 
-	left, right int
+	Left, Right int
 }
 
-type contextImage struct {
-	deleted bool
-	h       int
+type RenderImage struct {
+	Deleted bool
+	H       int
 
 	image.Image
-	data []byte
+	Data []byte
 	nanovgo.ImageFlags
-	wh image.Point
+	Wh image.Point
 }
 
-type contextFont struct {
-	deleted  bool
-	hbackend int
+type RenderFont struct {
+	Deleted  bool
+	Hbackend int
 
-	data     []byte
-	freeData byte
+	Data     []byte
+	FreeData byte
 }
 
 // Context is a draw list with the interface of Nanovgo.
@@ -75,7 +76,7 @@ func (c *Context) Sub() *Context {
 		state:  c.state, // TODO Subcontexts are not required to Begin/EndFrame
 		parent: c,
 		publicContext: publicContext{
-			fs: c.fs,
+			Fs: c.Fs,
 		}}
 }
 
@@ -88,8 +89,8 @@ func (c *Context) Replay(sub *Context) {
 func newContext() *Context {
 	return &Context{
 		publicContext: publicContext{
-			fs:     fontstashmini.New(512, 512),
-			Images: []contextImage{{}},
+			Fs:     fontstashmini.New(512, 512),
+			Images: []RenderImage{{}},
 		},
 	}
 }
@@ -106,13 +107,13 @@ type SpriteUnit struct {
 // type PublicContext publicContext
 
 type publicContext struct {
-	nvguop // Current state
+	RenderOp // Current state
 
-	fs *fontstashmini.FontStash
+	Fs *fontstashmini.FontStash
 
-	Log           []nvguop
-	Images        []contextImage
-	Fonts         []contextFont
+	Log           []RenderOp
+	Images        []RenderImage
+	Fonts         []RenderFont
 	SpriteUnits   []SpriteUnit
 	devicePxRatio float64
 }
@@ -144,8 +145,8 @@ func (c *Context) DebugDumpPathCache() {
 
 func (c *Context) IntersectScissor(x, y, w, h float64) {
 	c.assertPathStarted()
-	_ = c.add(op.IntersectScissor, nvguop{
-		args: [10]float64{x, y, w, h},
+	_ = c.add(op.IntersectScissor, RenderOp{
+		Args: [10]float64{x, y, w, h},
 	})
 }
 
@@ -153,14 +154,14 @@ func functag(f any) uintptr {
 	return uintptr(reflect.ValueOf(f).UnsafePointer())
 }
 
-func (c *Context) add(f op.Op, op nvguop) op.Op {
-	op.tag = f
+func (c *Context) add(f op.Op, op RenderOp) op.Op {
+	op.Tag = f
 	c.Log = append(c.Log, op)
 
 	p := c
 	for ; p.parent != nil; p = p.parent {
 	}
-	return op.tag
+	return op.Tag
 }
 
 /* Frame and context state */
@@ -171,15 +172,15 @@ func (c *Context) BeginFrame(windowWidth, windowHeight int, devicePixelRatio flo
 	}
 	c.SpriteUnits = c.SpriteUnits[:0]
 
-	st := c.add(op.BeginFrame, nvguop{
-		iargs: [10]int{windowWidth, windowHeight},
-		args:  [10]float64{devicePixelRatio},
+	st := c.add(op.BeginFrame, RenderOp{
+		Iargs: [10]int{windowWidth, windowHeight},
+		Args:  [10]float64{devicePixelRatio},
 	})
 	c.devicePxRatio = devicePixelRatio
 	c.state = st
 }
 func (c *Context) EndFrame() (oldhash [512]byte) {
-	_ = c.add(op.EndFrame, nvguop{})
+	_ = c.add(op.EndFrame, RenderOp{})
 	c.state = 0
 	return
 }
@@ -196,14 +197,14 @@ func (c *Context) CreateImageRGBA(w, h int, imageFlags nanovgo.ImageFlags, data 
 	if c.parent != nil {
 		panic(`contraption.Context: can't create image from subcontext`)
 	}
-	c.Images = append(c.Images, contextImage{
+	c.Images = append(c.Images, RenderImage{
 		Image:      nil,
-		data:       data,
+		Data:       data,
 		ImageFlags: imageFlags,
-		wh:         image.Pt(w, h),
+		Wh:         image.Pt(w, h),
 	})
-	_ = c.add(op.CreateImageRGBA, nvguop{
-		himage: len(c.Images),
+	_ = c.add(op.CreateImageRGBA, RenderOp{
+		Himage: len(c.Images),
 	})
 	return len(c.Images)
 }
@@ -211,12 +212,12 @@ func (c *Context) CreateImageFromGoImage(imageFlag nanovgo.ImageFlags, img image
 	if c.parent != nil {
 		panic(`contraption.Context: can't create image from subcontext`)
 	}
-	c.Images = append(c.Images, contextImage{
+	c.Images = append(c.Images, RenderImage{
 		Image:      img,
 		ImageFlags: imageFlag,
 	})
-	_ = c.add(op.CreateImageFromGoImage, nvguop{
-		himage: len(c.Images) - 1,
+	_ = c.add(op.CreateImageFromGoImage, RenderOp{
+		Himage: len(c.Images) - 1,
 	})
 	return len(c.Images) - 1
 }
@@ -227,10 +228,10 @@ func (c *Context) DeleteImage(img int) {
 	if img < 0 {
 		panic(`contraption.Context: incorrect image handle`)
 	}
-	if c.Images[img].deleted {
+	if c.Images[img].Deleted {
 		panic(`contraption.Context: double image delete`)
 	}
-	c.Images[img] = contextImage{deleted: true}
+	c.Images[img] = RenderImage{Deleted: true}
 }
 func (c *Context) ImageSize(img int) (int, int, error) {
 	panic(`unimplemented`)
@@ -242,11 +243,11 @@ func (c *Context) CreateFontFromMemory(name string, data []byte, freeData uint8)
 	if c.parent != nil {
 		panic(`contraption.Context: can't create font from subcontext`)
 	}
-	c.Fonts = append(c.Fonts, contextFont{
-		data:     data,
-		freeData: freeData,
+	c.Fonts = append(c.Fonts, RenderFont{
+		Data:     data,
+		FreeData: freeData,
 	})
-	c.fs.AddFontFromMemory(name, data, freeData)
+	c.Fs.AddFontFromMemory(name, data, freeData)
 	return len(c.Fonts) - 1
 }
 
@@ -254,26 +255,26 @@ func (c *Context) CreateFontFromMemory(name string, data []byte, freeData uint8)
 
 func (c *Context) Circle(cx, cy, r float64) {
 	c.assertPathStarted()
-	_ = c.add(op.Circle, nvguop{
-		args: [10]float64{cx, cy, r},
+	_ = c.add(op.Circle, RenderOp{
+		Args: [10]float64{cx, cy, r},
 	})
 }
 func (c *Context) Rect(x, y, w, h float64) {
 	c.assertPathStarted()
-	_ = c.add(op.Rect, nvguop{
-		args: [10]float64{x, y, w, h},
+	_ = c.add(op.Rect, RenderOp{
+		Args: [10]float64{x, y, w, h},
 	})
 }
 func (c *Context) Ellipse(cx, cy, rx, ry float64) {
 	c.assertPathStarted()
-	_ = c.add(op.Ellipse, nvguop{
-		args: [10]float64{cx, cy, rx, ry},
+	_ = c.add(op.Ellipse, RenderOp{
+		Args: [10]float64{cx, cy, rx, ry},
 	})
 }
 func (c *Context) RoundedRect(x, y, w, h, r float64) {
 	c.assertPathStarted()
-	_ = c.add(op.RoundedRect, nvguop{
-		args: [10]float64{x, y, w, h, r},
+	_ = c.add(op.RoundedRect, RenderOp{
+		Args: [10]float64{x, y, w, h, r},
 	})
 }
 
@@ -284,75 +285,75 @@ func (c *Context) BeginPath() {
 	// if c.state != functag(opClosePath) {
 	// 	panic(`contraption.Context: can't BeginPath before ClosePath`)
 	// }
-	st := c.add(op.BeginPath, nvguop{})
+	st := c.add(op.BeginPath, RenderOp{})
 	c.state = st
 }
 func (c *Context) ClosePath() {
 	c.assertPathStarted()
-	_ = c.add(op.ClosePath, nvguop{})
+	_ = c.add(op.ClosePath, RenderOp{})
 	c.state = op.BeginFrame
 }
 func (c *Context) Fill() {
 	if c.state == 1 {
 		panic(`contraption.Context: another Fill can be called only after Also`)
 	}
-	_ = c.add(op.Fill, nvguop{})
+	_ = c.add(op.Fill, RenderOp{})
 	c.state = 1
 }
 func (c *Context) Stroke() {
 	if c.state == 1 {
 		panic(`contraption.Context: another Stroke can be called only after Also`)
 	}
-	_ = c.add(op.Stroke, nvguop{})
+	_ = c.add(op.Stroke, RenderOp{})
 	c.state = 1
 }
 func (c *Context) Also() {
 	if c.state != 1 {
 		panic(`contraption.Context: can't use Also before Stroke or Fill`)
 	}
-	_ = c.add(op.Also, nvguop{})
+	_ = c.add(op.Also, RenderOp{})
 	c.state = 2
 }
 func (c *Context) Arc(cx, cy, r, a0, a1 float64, dir nanovgo.Direction) {
 	c.assertPathStarted()
-	_ = c.add(op.Arc, nvguop{
-		args:      [10]float64{cx, cy, r, a0, a1},
+	_ = c.add(op.Arc, RenderOp{
+		Args:      [10]float64{cx, cy, r, a0, a1},
 		Direction: dir,
 	})
 }
 func (c *Context) ArcTo(x1, y1, x2, y2, radius float64) {
 	c.assertPathStarted()
-	_ = c.add(op.ArcTo, nvguop{
-		args: [10]float64{x1, y1, x2, y2, radius},
+	_ = c.add(op.ArcTo, RenderOp{
+		Args: [10]float64{x1, y1, x2, y2, radius},
 	})
 }
 func (c *Context) BezierTo(c1x, c1y, c2x, c2y, x, y float64) {
 	c.assertPathStarted()
-	_ = c.add(op.BezierTo, nvguop{
-		args: [10]float64{c1x, c1y, c2x, c2y, x, y},
+	_ = c.add(op.BezierTo, RenderOp{
+		Args: [10]float64{c1x, c1y, c2x, c2y, x, y},
 	})
 }
 func (c *Context) LineTo(x, y float64) {
 	c.assertPathStarted()
-	_ = c.add(op.LineTo, nvguop{
-		args: [10]float64{x, y},
+	_ = c.add(op.LineTo, RenderOp{
+		Args: [10]float64{x, y},
 	})
 }
 func (c *Context) MoveTo(x, y float64) {
 	c.assertPathStarted()
-	_ = c.add(op.MoveTo, nvguop{
-		args: [10]float64{x, y},
+	_ = c.add(op.MoveTo, RenderOp{
+		Args: [10]float64{x, y},
 	})
 }
 func (c *Context) QuadTo(cx, cy, x, y float64) {
 	c.assertPathStarted()
-	_ = c.add(op.QuadTo, nvguop{
-		args: [10]float64{cx, cy, x, y},
+	_ = c.add(op.QuadTo, RenderOp{
+		Args: [10]float64{cx, cy, x, y},
 	})
 }
 func (c *Context) PathWinding(winding nanovgo.Winding) {
 	c.assertPathStarted()
-	_ = c.add(op.PathWinding, nvguop{
+	_ = c.add(op.PathWinding, RenderOp{
 		Winding: winding,
 	})
 }
@@ -360,34 +361,34 @@ func (c *Context) PathWinding(winding nanovgo.Winding) {
 /* State management */
 
 func (c *Context) Reset() {
-	_ = c.add(op.Reset, nvguop{})
+	_ = c.add(op.Reset, RenderOp{})
 }
 func (c *Context) ResetScissor() {
-	_ = c.add(op.ResetScissor, nvguop{})
+	_ = c.add(op.ResetScissor, RenderOp{})
 }
 func (c *Context) ResetTransform() {
-	_ = c.add(op.ResetTransform, nvguop{})
+	_ = c.add(op.ResetTransform, RenderOp{})
 }
 func (c *Context) Restore() {
-	_ = c.add(op.Restore, nvguop{})
+	_ = c.add(op.Restore, RenderOp{})
 }
 func (c *Context) Save() {
-	_ = c.add(op.Save, nvguop{})
+	_ = c.add(op.Save, RenderOp{})
 }
 
 // TODO All transformations must be resolved by Context, not by the backend.
 /* Transformation mutators */
 
 func (c *Context) Rotate(angle float64) {
-	_ = c.add(op.Rotate, nvguop{})
+	_ = c.add(op.Rotate, RenderOp{})
 }
 func (c *Context) Scale(x, y float64) {
 	panic(`unimplemented`)
 }
 func (c *Context) Scissor(x, y, w, h float64) {
 	c.assertFrameStarted()
-	_ = c.add(op.Scissor, nvguop{
-		args: [10]float64{x, y, w, h},
+	_ = c.add(op.Scissor, RenderOp{
+		Args: [10]float64{x, y, w, h},
 	})
 }
 func (c *Context) SkewX(angle float64) {
@@ -398,7 +399,7 @@ func (c *Context) SkewY(angle float64) {
 }
 func (c *Context) SetTransform(t nanovgo.TransformMatrix) {
 	c.TransformMatrix = t
-	_ = c.add(op.SetTransform, nvguop{
+	_ = c.add(op.SetTransform, RenderOp{
 		TransformMatrix: t,
 	})
 }
@@ -412,15 +413,15 @@ func (c *Context) Translate(x, y float64) {
 /* Miscellaneous mutators */
 
 func (c *Context) SetFillColor(color nanovgo.Color) {
-	c.fillc = color
-	_ = c.add(op.SetFillColor, nvguop{
-		fillc: color,
+	c.Fillc = color
+	_ = c.add(op.SetFillColor, RenderOp{
+		Fillc: color,
 	})
 }
 func (c *Context) SetFillPaint(paint nanovgo.Paint) {
-	c.fillp = paint
-	_ = c.add(op.SetFillPaint, nvguop{
-		fillp: paint,
+	c.Fillp = paint
+	_ = c.add(op.SetFillPaint, RenderOp{
+		Fillp: paint,
 	})
 }
 func (c *Context) SetFontBlur(blur float64) {
@@ -430,16 +431,16 @@ func (c *Context) SetFontFace(font string) {
 	panic(`unimplemented`)
 }
 func (c *Context) SetFontFaceID(font int) {
-	c.hfont = font
-	_ = c.add(op.SetFontFaceID, nvguop{
-		hfont: font,
+	c.Hfont = font
+	_ = c.add(op.SetFontFaceID, RenderOp{
+		Hfont: font,
 	})
 }
 func (c *Context) SetFontSize(size float64) {
 	// TODO Convert from cap to em in other backends
-	c.fontsiz = size
-	_ = c.add(op.SetFontSize, nvguop{
-		fontsiz: size,
+	c.Fontsiz = size
+	_ = c.add(op.SetFontSize, RenderOp{
+		Fontsiz: size,
 	})
 }
 func (c *Context) SetGlobalAlpha(alpha float64) {
@@ -455,26 +456,26 @@ func (c *Context) SetMiterLimit(limit float64) {
 	panic(`unimplemented`)
 }
 func (c *Context) SetStrokeColor(color nanovgo.Color) {
-	c.strokec = color
-	_ = c.add(op.SetStrokeColor, nvguop{
-		strokec: color,
+	c.Strokec = color
+	_ = c.add(op.SetStrokeColor, RenderOp{
+		Strokec: color,
 	})
 }
 func (c *Context) SetStrokePaint(paint nanovgo.Paint) {
-	c.strokep = paint
-	_ = c.add(op.SetStrokePaint, nvguop{
-		strokep: paint,
+	c.Strokep = paint
+	_ = c.add(op.SetStrokePaint, RenderOp{
+		Strokep: paint,
 	})
 }
 func (c *Context) SetStrokeWidth(width float64) {
-	c.strokew = width
-	_ = c.add(op.SetStrokeWidth, nvguop{
-		strokew: width,
+	c.Strokew = width
+	_ = c.add(op.SetStrokeWidth, RenderOp{
+		Strokew: width,
 	})
 }
 func (c *Context) SetTextAlign(align nanovgo.Align) {
 	c.Align = align
-	_ = c.add(op.SetTextAlign, nvguop{
+	_ = c.add(op.SetTextAlign, RenderOp{
 		Align: align,
 	})
 }
@@ -546,21 +547,21 @@ func (c *Context) TextRune(x, y float64, runes []rune) float64 {
 
 	scale := float64(min(c.CurrentTransform().GetAverageScale(), 4)) * c.devicePxRatio // TODO Extract the diagonal from current transform.
 	invScale := 1.0 / scale
-	if c.hfont < 0 {
+	if c.Hfont < 0 {
 		return 0
 	}
 
-	c.fs.SetSize(float32(c.fontsiz * scale))
-	c.fs.SetSpacing(float32(c.lsp * scale))
-	c.fs.SetBlur(float32(c.fblur * scale))
-	c.fs.SetAlign(fontstashmini.ALIGN_LEFT)
-	c.fs.SetFont(c.hfont)
+	c.Fs.SetSize(float32(c.Fontsiz * scale))
+	c.Fs.SetSpacing(float32(c.Lsp * scale))
+	c.Fs.SetBlur(float32(c.Fblur * scale))
+	c.Fs.SetAlign(fontstashmini.ALIGN_LEFT)
+	c.Fs.SetFont(c.Hfont)
 
 	left := len(p.SpriteUnits)
 	right := left + max(2, len(runes)) // Not less than two quads.
 	p.SpriteUnits = append(p.SpriteUnits, make([]SpriteUnit, right-left)...)
 
-	iter := c.fs.TextIterForRunes(float32(x*scale), float32(y*scale), runes)
+	iter := c.Fs.TextIterForRunes(float32(x*scale), float32(y*scale), runes)
 	prevIter := iter
 
 	reallocateImage := false
@@ -574,24 +575,24 @@ func (c *Context) TextRune(x, y float64, runes []rune) float64 {
 			reallocateImage = true
 		}
 		// TODO -1 means 'do kerning'
-		if iter.PrevGlyph.Index == -1 && c.hfont < maxFontTextures-1 {
+		if iter.PrevGlyph.Index == -1 && c.Hfont < maxFontTextures-1 {
 			iter = prevIter
 			quad, _ = iter.Next() // try again
 		}
 		prevIter = iter
 		p.SpriteUnits[left:right][i] = SpriteUnit{
-			Hfont: c.hfont,
+			Hfont: c.Hfont,
 			Clip:  geom.Rect(float64(quad.X0), float64(quad.Y0), float64(quad.X1), float64(quad.Y1)),
 			Tc:    geom.Rect(float64(quad.S0), float64(quad.T0), float64(quad.S1), float64(quad.T1)),
 		}
 		i++
 	}
 
-	_ = c.add(op.TextRune, nvguop{
-		left:  left,
-		right: right,
-		runes: runes,
-		args:  [10]float64{invScale, x, y, cond(reallocateImage, 1.0, 0)},
+	_ = c.add(op.TextRune, RenderOp{
+		Left:  left,
+		Right: right,
+		Runes: runes,
+		Args:  [10]float64{invScale, x, y, cond(reallocateImage, 1.0, 0)},
 	})
 
 	return float64(iter.X)
@@ -600,20 +601,39 @@ func (c *Context) TextRune(x, y float64, runes []rune) float64 {
 func (c *Context) TextBounds(x, y float64, runes []rune) (float64, geom.Rectangle) {
 	scale := 1.0 // * c.devicePxRatio
 	invScale := 1.0 / scale
-	if c.hfont < 0 {
+	if c.Hfont < 0 {
 		return 0, geom.Rectangle{}
 	}
 
-	c.fs.SetSize(float32(c.fontsiz * scale))
-	c.fs.SetSpacing(float32(c.lsp * scale))
-	c.fs.SetBlur(float32(c.fblur * scale))
-	c.fs.SetFont(c.hfont)
+	c.Fs.SetSize(float32(c.Fontsiz * scale))
+	c.Fs.SetSpacing(float32(c.Lsp * scale))
+	c.Fs.SetBlur(float32(c.Fblur * scale))
+	c.Fs.SetFont(c.Hfont)
 
-	width, bounds, ok := c.fs.TextBoundsOfRunes(float32(x*scale), float32(y*scale), runes)
+	width, bounds, ok := c.Fs.TextBoundsOfRunes(float32(x*scale), float32(y*scale), runes)
 	if !ok {
-		bounds.Min.Y, bounds.Max.Y = c.fs.LineBounds(float32(y * scale))
+		bounds.Min.Y, bounds.Max.Y = c.Fs.LineBounds(float32(y * scale))
 		bounds.Max = bounds.Max.Mul(invScale)
 		bounds.Min = bounds.Min.Mul(invScale)
 	}
 	return float64(width) * invScale, bounds
+}
+
+// Renderer is an object that takes a context and interprets every graphics operation
+// in it to obtain some graphical output.
+// Typically, Renderer is called with the periodicity of the screen refresh.
+type Renderer interface {
+	Run(c *Context)
+}
+
+// Windower is an object that enables Contraption to communicate with the operating system.
+// Windower receives input events and manages the window state.
+//
+// Windower does not handle screen refresh blocking, it must be handled by the Renderer.
+type Windower interface {
+	SetupInputCallbacks(emit func(ev any, pt geom.Point, t time.Time), u *Events)
+	PollEvents(u *Events)
+	WaitEvents(u *Events)
+	Next(u *Events) (ok bool, w, h int, scale float64)
+	Develop(u *Events)
 }

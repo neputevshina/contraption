@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"image"
 	"log"
 	"strconv"
 	"strings"
@@ -10,6 +11,8 @@ import (
 
 	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/neputevshina/contraption"
+	wglfw "github.com/neputevshina/contraption/backends/glfw"
+	"github.com/neputevshina/contraption/backends/nanovgo"
 	"github.com/neputevshina/geom"
 	"golang.org/x/image/font/gofont/goregular"
 
@@ -55,8 +58,10 @@ func main() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
 
+	glfw := wglfw.New(image.Rect(0, 0, 1024, 768))
+	nvg := nanovgo.New(0)
 	wo := World{
-		World: contraption.New(contraption.Config{}),
+		World: contraption.New(glfw, nvg, contraption.Config{}),
 	}
 	wo.Text = wo.NewText(goregular.TTF)
 	// f, _ := contraption.NewFont(nil, goregular.TTF, "")
@@ -371,6 +376,7 @@ func (wo *World) Drop(filename *string, mime string) *Sorm {
 }
 
 func (wo *World) Numbox(v *float64) *Sorm {
+	wn := wo.Windower().(*wglfw.Windower).Window
 	return wo.Compound(
 		wo.Halign(0.5),
 		wo.Valign(0.5),
@@ -385,7 +391,7 @@ func (wo *World) Numbox(v *float64) *Sorm {
 				*v = 0
 			}
 			if m.Match(`Click(1)`) {
-				wo.Window.SetInputMode(glfw.CursorMode, glfw.CursorDisabled)
+				wn.SetInputMode(glfw.CursorMode, glfw.CursorDisabled)
 				*wo.Key(v) = wo.Trace[0].Pt.Y
 			}
 			if m.Match(`!Unclick(1):any* Click(1):in`) {
@@ -401,7 +407,7 @@ func (wo *World) Numbox(v *float64) *Sorm {
 				*wo.Key(v) = wo.Trace[0].Pt.Y
 			}
 			if m.Nochoke().Match(`Unclick(1):any`) {
-				wo.Window.SetInputMode(glfw.CursorMode, glfw.CursorNormal)
+				wn.SetInputMode(glfw.CursorMode, glfw.CursorNormal)
 			}
 		}),
 		wo.Label(strconv.FormatFloat(*v, 'f', 2, 64)))

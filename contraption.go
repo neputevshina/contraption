@@ -4,14 +4,14 @@
 //
 // TODO:
 //	- Plan for 20260201:
-//		- Make two more packages
-//			- contraption/deferred with Context definition
-//			- contraption/nanovgoglfw with current context
-//		- Add deferred.Context argument to the contraption.New
-//		- Maybe rename current Context to GraphicsContext and add InputContext
+//		+ Make two more packages
+//			~ contraption/deferred with Context definition
+//			+ contraption/nanovgoglfw with current context
+//		+ Add deferred.Context argument to the contraption.New
+//		+ Maybe rename current Context to GraphicsContext and add InputContext
 //			- Then, make contraption/graphics/nanovgo and contrapion/input/glfw
 //			- Or don't, because Gio is both graphics and input context
-//		- Make (*World).Develop returning deferred ops buffer back to user
+//		+ Make (*World).Develop returning deferred ops buffer back to user
 //		+ Replace functags with literal values, will speed up the render
 //	- Desktop integration
 //		- Shutdown prevention (“unsaved changes”)
@@ -234,7 +234,6 @@ import (
 	"strings"
 	"unsafe"
 
-	"github.com/go-gl/gl/v2.1/gl"
 	"github.com/neputevshina/contraption/nanovgo"
 	"github.com/neputevshina/geom"
 	"golang.org/x/exp/slices"
@@ -412,7 +411,8 @@ type World struct {
 	*Events
 	gen int
 
-	Window Window
+	rer Renderer
+	wer Windower
 
 	tmp []*Sorm
 
@@ -437,10 +437,10 @@ type World struct {
 	keys      map[any]*labelt
 	BeforeVgo func()
 
-	drag        any
-	dragstart   geom.Point
-	sinks       []func(any)
-	dragEffects map[reflect.Type]func(interval [2]geom.Point, drag any) *Sorm
+	drag      any
+	dragstart geom.Point
+	sinks     []func(any)
+	drags     map[reflect.Type]func(interval [2]geom.Point, drag any) *Sorm
 
 	showOutlines bool
 	f1           bool
@@ -454,6 +454,14 @@ type World struct {
 
 }
 
+func (wo *World) Renderer() Renderer {
+	return wo.rer
+}
+
+func (wo *World) Windower() Windower {
+	return wo.wer
+}
+
 type imagestruct struct {
 	gen     int
 	texid   int
@@ -462,14 +470,14 @@ type imagestruct struct {
 
 func AddDrag[T any](wo *World, convert func(interval [2]geom.Point, drag T) *Sorm) {
 	var z T
-	wo.dragEffects[typeof(z)] = func(interval [2]geom.Point, drag any) *Sorm {
+	wo.drags[typeof(z)] = func(interval [2]geom.Point, drag any) *Sorm {
 		return convert(interval, drag.(T))
 	}
 }
 
-func (wo *World) ResetDragEffects() {
-	for k := range wo.dragEffects {
-		delete(wo.dragEffects, k)
+func (wo *World) ResetDrags() {
+	for k := range wo.drags {
+		delete(wo.drags, k)
 	}
 }
 
@@ -917,9 +925,9 @@ func (wo *World) Root(s ...*Sorm) {
 	wo.Compound(
 		wo.Void(complex(wo.Wwin, 0), complex(wo.Hwin, 0)),
 		func() *Sorm {
-			if wo.dragEffects[typeof(wo.drag)] != nil && wo.drag != nil {
+			if wo.drags[typeof(wo.drag)] != nil && wo.drag != nil {
 				ps := [2]geom.Point{wo.dragstart, wo.Trace[0].Pt}
-				return wo.dragEffects[typeof(wo.drag)](ps, wo.drag)
+				return wo.drags[typeof(wo.drag)](ps, wo.drag)
 			}
 			return nil
 		}(),
@@ -1400,9 +1408,22 @@ func (wo *World) layout(pool []*Sorm, root ...*Sorm) {
 	})
 }
 
+func (wo *World) windowDevelop() {
+	if wo.BeforeVgo != nil {
+		wo.BeforeVgo()
+	}
+	wo.BeforeVgo = nil
+	_ = wo.Vgo.EndFrame()
+	if wo.Events.tempcur == 0 {
+		// Retain if was not changed
+		wo.rer.Run(wo.Vgo)
+		wo.wer.Develop(wo.Events)
+	}
+}
+
 // Develop applies the layout and renders the next frame.
 // See package description for preferred use of Contraption.
-func (wo *World) Develop() {
+func (wo *World) Develop() []RenderOp {
 	vgo := wo.Vgo
 
 	vgo.ResetTransform()
@@ -1673,6 +1694,8 @@ skiplayout:
 			delete(wo.images, k)
 		}
 	}
+
+	return wo.Vgo.Log
 }
 
 // Run runs the world, calling the onevent function on every event.
@@ -1687,33 +1710,16 @@ func (wo *World) Run(onevent func()) {
 // See package description for preferred use of Contraption.
 func (wo *World) Next() bool {
 	// NOTE Next()/Develop() is easier to debug
+	wo.Vgo.Log = wo.Vgo.Log[:0]
 	wo.MatchCount = 0
-
-	window := wo.Window
-	if window.ShouldClose() {
+	wo.Events.next()
+	ok, w, h, sc := wo.wer.Next(wo.Events)
+	if !ok {
 		return false
 	}
-
-	// TODO Decouple backend and put more stuff in that .next().
-	wo.Events.next()
-
-	w, h := window.GetFramebufferSize()
-	gl.Viewport(0, 0, int32(w), int32(h))
-
-	w, h = window.GetSize()
 	wo.Wwin, wo.Hwin = float64(w), float64(h)
 	wo.Events.Viewport = geom.Pt(float64(w), float64(h))
-
-	cl := hex(`#ffffff`)
-	gl.ClearColor(cl.R, cl.G, cl.B, cl.A)
-	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT)
-	gl.Enable(gl.BLEND)
-	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
-	gl.Enable(gl.CULL_FACE)
-	gl.Disable(gl.DEPTH_TEST)
-
-	sc, _ := window.GetContentScale()
-	wo.Vgo.BeginFrame(w, h, math.Ceil(float64(sc)))
+	wo.Vgo.BeginFrame(w, h, math.Ceil(sc))
 
 	wo.Vgo.SetFontFaceID(1)
 	wo.Vgo.SetFontSize(11)
@@ -1831,15 +1837,7 @@ type Config struct {
 	ReplayReader io.Reader
 }
 
-type Window struct {
-	window
-}
-
-func (wi *Window) Rect() image.Rectangle {
-	return wi.rect()
-}
-
-func New(config Config) (wo *World) {
+func New(wer Windower, rer Renderer, config Config) (wo *World) {
 	if config.WindowRect.Dx() == 0 {
 		config.WindowRect.Max.X = config.WindowRect.Min.X + 1024
 	}
@@ -1851,15 +1849,16 @@ func New(config Config) (wo *World) {
 
 	wo = &World{}
 	wo.Vgo = newContext()
-	concretenew(config, wo)
+	wo.rer = rer
+	wo.wer = wer
 
 	wo.hasher = fnv.New128a()
 
-	wo.Events = NewEventTracer(wo.Window.window, config.ReplayReader)
+	wo.Events = NewEventTracer(wer, config.ReplayReader)
 	wo.sinks = make([]func(any), 1)
 	wo.keys = map[any]*labelt{}
 	wo.images = map[io.Reader]imagestruct{}
-	wo.dragEffects = map[reflect.Type]func(interval [2]geom.Point, drag any) *Sorm{}
+	wo.drags = map[reflect.Type]func(interval [2]geom.Point, drag any) *Sorm{}
 	wo.alloc = wo.allocmain
 	return wo
 }
