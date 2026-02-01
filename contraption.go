@@ -1,8 +1,24 @@
-// Contraption: a simple framework for user interfaces.
+// Contraption: a framework for user interfaces.
 //
 // A good user interface framework must be an engine for a word processing game.
 //
 // TODO:
+//	- Plan for 20260201:
+//		- Make two more packages
+//			- contraption/deferred with Context definition
+//			- contraption/nanovgoglfw with current context
+//		- Add deferred.Context argument to the contraption.New
+//		- Maybe rename current Context to GraphicsContext and add InputContext
+//			- Then, make contraption/graphics/nanovgo and contrapion/input/glfw
+//			- Or don't, because Gio is both graphics and input context
+//		- Make (*World).Develop returning deferred ops buffer back to user
+//		+ Replace functags with literal values, will speed up the render
+//	- Desktop integration
+//		- Shutdown prevention (“unsaved changes”)
+//	- Using the experience of Clay UI library
+//		- Higher-level rendering operations, replace TextRune command with simply Text
+//		- Renderer-independence by returning the command array.
+//		- Event library independence by callbacks
 //	- Optimized paint
 //		- Two-pass Z-buffered drawing
 //			- Eliminate overdraw
@@ -26,6 +42,7 @@
 //		- https://rxi.github.io/textbox_behaviour.html
 //		- Implemented over Sequence
 //			- TextSequence interface { Backspace(i, j), Delete(i, j), Insert(i, j), Copy(i, j) etc }
+//			- Operation-level control for journaled text (OT, CRDTs)
 //		- Sequence cropping will provide efficiency.
 //		- Editable() modifier
 //			- Aligner and Align will change the behavior.
@@ -197,7 +214,6 @@
 //
 //
 //	Anti-todo:
-//	- Geometric constraints
 //	- 3D
 //	- Stylesheets
 //
@@ -373,8 +389,11 @@ type Equation interface {
 
 // TODO Nesting sequences and scissors with []pools
 type pools struct {
-	nextn   int
+	nextn int
+
 	zorder  []Sorm
+	pzorder []Sorm
+
 	pool    []*Sorm
 	auxn    int
 	auxpool []*Sorm
@@ -1622,6 +1641,9 @@ skiplayout:
 	// correctrly determine relationships.
 	// Hence it is applicable to the old pool, the only reason it is
 	// saved is to preserve keys.
+	wo.zorder, wo.pzorder = wo.pzorder, wo.zorder
+	// Since swapping the slices does not reallocate, all pointers are
+	// still valid and point to the respective swapped elements.
 	wo.old, wo.pool = wo.pool, wo.old
 	wo.auxold, wo.auxpool = wo.auxpool, wo.auxold
 
@@ -1798,8 +1820,9 @@ type ActivatorPainter interface {
 	Paint(wo *World) Sorm
 }
 
+// Config is the starting setup for Contraption.
 type Config struct {
-	// Default window frame.
+	// Default window frame after launch.
 	// Effective if not zero.
 	WindowRect image.Rectangle
 

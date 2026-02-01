@@ -9,6 +9,7 @@ import (
 	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/h2non/filetype"
 	"github.com/neputevshina/contraption/nanovgo"
+	"github.com/neputevshina/contraption/op"
 	"github.com/neputevshina/geom"
 )
 
@@ -248,158 +249,158 @@ func runcontext(concrete any, c *Context) {
 	for i := range c.Log {
 		l := &c.Log[i]
 		switch l.tag {
-		case functag((*Context).Also):
+		case op.Also:
 			vgo.Also()
-		case functag((*Context).Arc):
+		case op.Arc:
 			vgo.Arc(float32(l.args[0]), float32(l.args[1]), float32(l.args[2]), float32(l.args[3]), float32(l.args[4]), l.Direction)
-		case functag((*Context).ArcTo):
+		case op.ArcTo:
 			vgo.ArcTo(float32(l.args[0]), float32(l.args[1]), float32(l.args[2]), float32(l.args[3]), float32(l.args[4]))
-		case functag((*Context).BeginFrame):
+		case op.BeginFrame:
 			vgo.BeginFrame(l.iargs[0], l.iargs[1], float32(l.args[0]))
-		case functag((*Context).BeginPath):
+		case op.BeginPath:
 			vgo.BeginPath()
-		case functag((*Context).BezierTo):
+		case op.BezierTo:
 			vgo.BezierTo(float32(l.args[0]), float32(l.args[1]), float32(l.args[2]), float32(l.args[3]), float32(l.args[4]), float32(l.args[5]))
-		case functag((*Context).Block):
+		case op.Block:
 			panic(`unimplemented`)
-		case functag((*Context).CancelFrame):
+		case op.CancelFrame:
 			vgo.CancelFrame()
-		case functag((*Context).Circle):
+		case op.Circle:
 			vgo.Circle(float32(l.args[0]), float32(l.args[1]), float32(l.args[2]))
-		case functag((*Context).ClosePath):
+		case op.ClosePath:
 			vgo.ClosePath()
-		case functag((*Context).CreateFontFromMemory):
+		case op.CreateFontFromMemory:
 			f := &c.Fonts[l.hfont]
 			f.hbackend = vgo.CreateFontFromMemory("", f.data, f.freeData)
-		case functag((*Context).CreateImageFromGoImage):
+		case op.CreateImageFromGoImage:
 			m := &c.Images[l.himage]
 			m.h = vgo.CreateImageFromGoImage(m.ImageFlags, m.Image)
-		case functag((*Context).CreateImageRGBA):
+		case op.CreateImageRGBA:
 			m := &c.Images[l.himage]
 			m.h = vgo.CreateImageRGBA(m.wh.X, m.wh.Y, m.ImageFlags, m.data)
-		case functag((*Context).CurrentTransform):
+		case op.CurrentTransform:
 			panic(`getter, unreachable`)
-		case functag((*Context).DebugDumpPathCache):
+		case op.DebugDumpPathCache:
 			vgo.DebugDumpPathCache()
-		case functag((*Context).Delete):
+		case op.Delete:
 			vgo.Delete()
-		case functag((*Context).DeleteImage):
+		case op.DeleteImage:
 			vgo.DeleteImage(c.Images[l.himage].h)
-		case functag((*Context).Ellipse):
+		case op.Ellipse:
 			vgo.Ellipse(float32(l.args[0]), float32(l.args[1]), float32(l.args[2]), float32(l.args[3]))
-		case functag((*Context).EndFrame):
+		case op.EndFrame:
 			vgo.EndFrame()
-		case functag((*Context).Fill):
+		case op.Fill:
 			vgo.Fill()
-		case functag((*Context).FindFont):
+		case op.FindFont:
 			panic(`unimplemented`)
-		case functag((*Context).FontBlur):
+		case op.FontBlur:
 			panic(`getter, unreachable`)
-		case functag((*Context).FontFace):
+		case op.FontFace:
 			panic(`getter, unreachable`)
-		case functag((*Context).FontFaceID):
+		case op.FontFaceID:
 			panic(`getter, unreachable`)
-		case functag((*Context).FontSize):
+		case op.FontSize:
 			panic(`getter, unreachable`)
-		case functag((*Context).GlobalAlpha):
+		case op.GlobalAlpha:
 			panic(`getter, unreachable`)
-		case functag((*Context).ImageSize):
+		case op.ImageSize:
 			panic(`getter, unreachable`)
-		case functag((*Context).IntersectScissor):
+		case op.IntersectScissor:
 			vgo.IntersectScissor(float32(l.args[0]), float32(l.args[1]), float32(l.args[2]), float32(l.args[3]))
-		case functag((*Context).LineCap):
+		case op.LineCap:
 			panic(`getter, unreachable`)
-		case functag((*Context).LineJoin):
+		case op.LineJoin:
 			panic(`getter, unreachable`)
-		case functag((*Context).LineTo):
+		case op.LineTo:
 			vgo.LineTo(float32(l.args[0]), float32(l.args[1]))
-		case functag((*Context).MiterLimit):
+		case op.MiterLimit:
 			panic(`getter, unreachable`)
-		case functag((*Context).MoveTo):
+		case op.MoveTo:
 			vgo.MoveTo(float32(l.args[0]), float32(l.args[1]))
-		case functag((*Context).PathWinding):
+		case op.PathWinding:
 			vgo.PathWinding(l.Winding)
-		case functag((*Context).QuadTo):
+		case op.QuadTo:
 			vgo.QuadTo(float32(l.args[0]), float32(l.args[1]), float32(l.args[2]), float32(l.args[3]))
-		case functag((*Context).Rect):
+		case op.Rect:
 			vgo.Rect(float32(l.args[0]), float32(l.args[1]), float32(l.args[2]), float32(l.args[3]))
-		case functag((*Context).Reset):
+		case op.Reset:
 			vgo.Reset()
-		case functag((*Context).ResetScissor):
+		case op.ResetScissor:
 			vgo.ResetScissor()
-		case functag((*Context).ResetTransform):
+		case op.ResetTransform:
 			vgo.ResetTransform()
-		case functag((*Context).Restore):
+		case op.Restore:
 			vgo.Restore()
-		case functag((*Context).Rotate):
+		case op.Rotate:
 			vgo.Rotate(float32(l.args[0]))
-		case functag((*Context).RoundedRect):
+		case op.RoundedRect:
 			vgo.RoundedRect(float32(l.args[0]), float32(l.args[1]), float32(l.args[2]), float32(l.args[3]), float32(l.args[4]))
-		case functag((*Context).Save):
+		case op.Save:
 			vgo.Save()
-		case functag((*Context).Scale):
+		case op.Scale:
 			vgo.Scale(float32(l.args[0]), float32(l.args[1]))
-		case functag((*Context).Scissor):
+		case op.Scissor:
 			vgo.Scissor(float32(l.args[0]), float32(l.args[1]), float32(l.args[2]), float32(l.args[3]))
-		case functag((*Context).SetFillColor):
+		case op.SetFillColor:
 			vgo.SetFillColor(l.fillc)
-		case functag((*Context).SetFillPaint):
+		case op.SetFillPaint:
 			p := l.fillp
 			p.Image = c.Images[p.Image].h
 			vgo.SetFillPaint(p)
-		case functag((*Context).SetFontBlur):
+		case op.SetFontBlur:
 			vgo.SetFontBlur(float32(l.args[0]))
-		case functag((*Context).SetFontFace):
+		case op.SetFontFace:
 			panic(`unimplemented`)
-		case functag((*Context).SetFontFaceID):
+		case op.SetFontFaceID:
 			vgo.SetFontFaceID(l.hfont)
-		case functag((*Context).SetFontSize):
+		case op.SetFontSize:
 			vgo.SetFontSize(float32(l.args[0]))
-		case functag((*Context).SetGlobalAlpha):
+		case op.SetGlobalAlpha:
 			vgo.SetGlobalAlpha(float32(l.args[0]))
-		case functag((*Context).SetLineCap):
+		case op.SetLineCap:
 			vgo.SetLineCap(l.linecap)
-		case functag((*Context).SetLineJoin):
+		case op.SetLineJoin:
 			vgo.SetLineJoin(l.linecap)
-		case functag((*Context).SetMiterLimit):
+		case op.SetMiterLimit:
 			vgo.SetMiterLimit(float32(l.args[0]))
-		case functag((*Context).SetStrokeColor):
+		case op.SetStrokeColor:
 			vgo.SetStrokeColor(l.strokec)
-		case functag((*Context).SetStrokePaint):
+		case op.SetStrokePaint:
 			p := l.strokep
 			p.Image = c.Images[p.Image].h
 			vgo.SetStrokePaint(p)
-		case functag((*Context).SetStrokeWidth):
+		case op.SetStrokeWidth:
 			vgo.SetStrokeWidth(float32(l.strokew))
-		case functag((*Context).SetTextAlign):
+		case op.SetTextAlign:
 			vgo.SetTextAlign(l.Align)
-		case functag((*Context).SetTextLetterSpacing):
+		case op.SetTextLetterSpacing:
 			vgo.SetTextLetterSpacing(float32(l.args[0]))
-		case functag((*Context).SetTextLineHeight):
+		case op.SetTextLineHeight:
 			vgo.SetTextLineHeight(float32(l.args[0]))
-		case functag((*Context).SetTransform):
+		case op.SetTransform:
 			vgo.SetTransform(l.TransformMatrix)
-		case functag((*Context).SetTransformByValue):
+		case op.SetTransformByValue:
 			vgo.SetTransformByValue(float32(l.args[0]), float32(l.args[1]), float32(l.args[2]), float32(l.args[3]), float32(l.args[4]), float32(l.args[5]))
-		case functag((*Context).SkewX):
+		case op.SkewX:
 			vgo.SkewX(float32(l.args[0]))
-		case functag((*Context).SkewY):
+		case op.SkewY:
 			vgo.SkewY(float32(l.args[0]))
-		case functag((*Context).Stroke):
+		case op.Stroke:
 			vgo.Stroke()
-		case functag((*Context).StrokeWidth):
+		case op.StrokeWidth:
 			vgo.StrokeWidth()
-		case functag((*Context).TextAlign):
+		case op.TextAlign:
 			panic(`getter, unreachable`)
-		case functag((*Context).TextBounds):
+		case op.TextBounds:
 			panic(`getter, unreachable`)
-		case functag((*Context).TextLetterSpacing):
+		case op.TextLetterSpacing:
 			panic(`getter, unreachable`)
-		case functag((*Context).TextLineHeight):
+		case op.TextLineHeight:
 			panic(`getter, unreachable`)
-		case functag((*Context).TextMetrics):
+		case op.TextMetrics:
 			panic(`getter, unreachable`)
-		case functag((*Context).TextRune):
+		case op.TextRune:
 			// vgo.TextRune(c.fs, float32(l.args[1]), float32(l.args[2]), l.runes)
 
 			sus := c.SpriteUnits[l.left:l.right]
@@ -439,9 +440,9 @@ func runcontext(concrete any, c *Context) {
 			vgo.FlushTextTexture(c.fs, bf.hbackend)
 			vgo.RenderText(vtxb)
 
-		case functag((*Context).Translate):
+		case op.Translate:
 			vgo.Translate(float32(l.args[0]), float32(l.args[1]))
-		case functag((*Context).UpdateImage):
+		case op.UpdateImage:
 			f := c.Images[l.himage]
 			vgo.UpdateImage(l.himage, f.data)
 		default:

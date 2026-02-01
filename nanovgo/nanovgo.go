@@ -780,7 +780,7 @@ func (c *Context) Stroke() {
 	c.flattenPaths()
 	for _, path := range c.cache.paths {
 		if path.count == 1 {
-			panic("")
+			panic("nanovgo: a path must contain at least two points")
 		}
 	}
 	if c.params.edgeAntiAlias() {
