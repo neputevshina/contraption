@@ -6,6 +6,8 @@ Go does not have a sane UI framework, and I need one for my heroic _endeavor_. G
 
 So I simply want a GUI framework that is [Apparatus](https://aprt.us) in form of code. Also it must be fast and be able to run in browser.
 
+2026-09-05: My new motivation: Flutter in Go. And no data in feedback loop. And every component is relayoutable by being lazy (rip gc). And relayout is local and performed by events. I'll make another repo (probably named contraption-exp) for this and leave a link here if I start.
+
 ## Intro
 See examples/sink/main.go
 
