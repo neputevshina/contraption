@@ -8,6 +8,8 @@ So I simply want a GUI framework that is [Apparatus](https://aprt.us) in form of
 
 2026-09-05: My new motivation: Flutter in Go. And no data in feedback loop. And every component is relayoutable by being lazy (rip gc). And relayout is local and performed by events. I'll make another repo (probably named contraption-exp) for this and leave a link here if I start.
 
+2026-09-10: New regexps: `"Unclick(1) {2} Hover* {1} Click(1)"`, parts in curly braces are “steps” that are matched too, but as a part of a whole gesture. Will help remove match inhibition.
+
 ## Intro
 See examples/sink/main.go
 
